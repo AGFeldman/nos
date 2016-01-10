@@ -1,4 +1,11 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
 typedef struct command {
     char * cmd;
@@ -16,6 +23,65 @@ command * new_command() {
     return cmd;
 }
 
-int main(int argc, char ** argv) {
+/* Print a prompt containing the username and current working directory. */
+void print_prompt();
+
+/*
+ * Given a string from the command line, translate it into a linked list
+ * of cmd_struct's.
+ * First tokenize the string according to whitespace and double quotes,
+ * then structurize the tokens,
+ * structures demarked by pipes ("|") and redirects ("<", ">").
+
+cmd_struct *structure_cmds(char[]);
+ */
+void structure_cmds(char[]);
+
+int main(void) {
+    /* maximum bytes in an input line */
+    int max_len = 1024;
+    char cmd_str[max_len]; /* sketchy */
+    while(1) {
+        print_prompt();
+
+        /* clear cmdstr? */
+        fgets(cmd_str, max_len, stdin);
+
+        structure_cmds(cmd_str);
+    }
+
+
     return 0;
 }
+
+void print_prompt() {
+    char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    printf("%s:%s>", getlogin(), cwd);
+}
+
+void structure_cmds(char cmd_str[]) {
+    char *iter = cmd_str;
+    int i = 0;
+    while (iter < cmd_str + strlen(cmd_str) - 1) {
+        printf("%d\n", i);
+        i++;
+        iter++;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
