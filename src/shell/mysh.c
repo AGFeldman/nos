@@ -62,10 +62,22 @@ void print_prompt() {
 
 void structure_cmds(char cmd_str[]) {
     char *iter = cmd_str;
-    int i = 0;
+    int len = 0;
     while (iter < cmd_str + strlen(cmd_str) - 1) {
-        printf("%d\n", i);
-        i++;
+        len++;
+        /* if double quote, skip to next double quote */
+        if (!strcmp(*iter, "\"")) {
+            len++;
+            while (strcmp(*(iter++), "\"")) {
+                len++;
+                iter++;
+            }
+        }
+
+        /* check for pipes */
+        if (!strcmp(*iter, "|")) {
+            
+        }
         iter++;
     }
 }
