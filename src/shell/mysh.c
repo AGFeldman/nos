@@ -74,6 +74,10 @@ void execute_command(command * cmd) {
  * Execute a linked list of commands, and handle piping between the commands.
  */
 void handle_commands(command * cmd, int * left_pipe) {
+    if (!cmd) {
+        return;
+    }
+
     int right_pipe[2];
     pid_t cpid;
 
