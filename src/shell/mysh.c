@@ -35,46 +35,6 @@ void print_cmd_list(command * cmd_pt) {
     }
 }
 
-/* Print a prompt containing the username and current working directory. */
-void print_prompt();
-
-/*
- * Given a string from the command line, translate it into a linked list
- * of cmd_struct's.
- * First tokenize the string according to whitespace and double quotes,
- * then structurize the tokens,
- * structures demarked by pipes ("|") and redirects ("<", ">").
- */
-command * structure_cmds(char *);
-
-/*
- * Given an array of string pointers, a source string, and the number of tokens
- * to make from the string,
- * create new strings to represent each token and set the array elements
- * to point to them. 
- * Recognize newlines and string termination characters as end of string.
- * If too many or too few tokens are found, report the error to stderr and exit.
- */
-void split_cmd(char ** dst, char * src, char * end, int n_tokens);
-
-int main(void) {
-    /* maximum bytes in an input line */
-    int max_len = 1024;
-    char cmd_str[max_len];
-
-    command * cmd_list;
-    while(1) {
-        print_prompt();
-
-        fgets(cmd_str, max_len, stdin);
-
-        cmd_list = structure_cmds(cmd_str);
-        print_cmd_list(cmd_list);
-    }
-
-    return 0;
-}
-
 void cleanup_commands(command * first_command) {
     if (!first_command) {
         return;
@@ -118,7 +78,6 @@ handle_commands(first_command, "left_pipe")
         -> child executes
         -> parent calls handle_commands
 */
-
 void handle_commands(command * cmd, int * left_pipe) {
     int right_pipe[2];
     pid_t cpid;
@@ -171,213 +130,136 @@ void handle_commands(command * cmd, int * left_pipe) {
     }
 }
 
-// int main(void) {
-//     command * cmds = new_command();
-//     free(cmds);
-// 
-//     // execlp("/bin/sh","/bin/sh", "-c", "ls -l /home/aaron/Dropbox/Coding/rpad/*.py", (char *)NULL);
-//     // execlp("/bin/ls", "/bin/ls", "-l /home/aaron/Dropbox/Coding/rpad/", (char *)NULL);  // doesn't work
-//     // execlp("/bin/ls", "/bin/ls", "-l", "/home/aaron/Dropbox/Coding/rpad/", (char *)NULL);
-//     
-//     // // Pretend that our list of strings is ["a", "aa", "aaa", ..., n * "a"]
-//     // int n = 10;
-//     // char ** argv = (char **) malloc((n + 2) * sizeof(char *));
-//     // argv[0] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/test";
-//     // int i;
-//     // int j;
-//     // for (i = 1; i <= n; i++) {
-//     //     argv[i] = (char *) malloc((n + 1) * sizeof(char));
-//     //     for (j = 0; j < i; j++) {
-//     //         argv[i][j] = 'n';
-//     //     }
-//     //     argv[i][i] = '\0';
-//     // } 
-//     // argv[n + 1] = NULL;
-// 
-//     // // char * argv[] = {"/bin/ls", "-l", "/home/aaron/Dropbox/Coding/rpad/", NULL};
-//     // char * envp[] = {NULL};
-//     // execve(argv[0], argv, envp); 
-// 
-//     // char * argv2[] = {"ls", "-l", "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/", NULL};
-//     // execvp(argv2[0], argv2);
-// 
-//     // char * argv3[] = {"ls", "-l", "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/", NULL};
-//     // execvp(argv3[0], argv3);
-//     
-//     // TODO(agf): Set up a cmds sequence with two structs of commands, 
-//     // then call handle_commands
-//     
-//     command * cmd1 = new_command();
-//     command * cmd2 = new_command();
-//     cmd1->next = cmd2;
-//     cmd1->tokens = malloc(3 * sizeof(char *));
-//     cmd1->tokens[0] = "cat";
-//     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-//     cmd1->tokens[2] = NULL;
-//     cmd2->tokens = malloc(3 * sizeof(char *));
-//     cmd2->tokens[0] = "grep";
-//     cmd2->tokens[1] = "fork";
-//     cmd2->tokens[2] = NULL;
-//     handle_commands(cmd1);
-// }
+// This should correctly handle a list of exactly two commands
+void handle_commands2(command * first_command, int * left_pipe) {
+    int pipefd[2];
+    
+    pid_t cpid;
 
+    if (pipe(pipefd) == -1) {
+        // TODO: print error
+        exit(EXIT_FAILURE);
+    }
+
+    cpid = fork();
+    
+    if (cpid < 0) {
+        // TODO: print error
+        exit(EXIT_FAILURE);
+    }
+
+    if (cpid != 0) {
+        // Parent process
+        // Close unused read end.
+        close(pipefd[0]);
+
+        // Use the write end instead of STDOUT
+        dup2(pipefd[1], STDOUT_FILENO);
+
+        // This is just an example
+        execvp(first_command->tokens[0], first_command->tokens);
+
+        // Wait for child
+        wait(NULL);
+        // Maybe our exit status should depend on the child's exit status
+    } else {
+        // Child process
+        // Close unused write end.
+        close(pipefd[1]);
+
+        // Use the read end instead of STDIN / take stdin from read end
+        dup2(pipefd[0], STDIN_FILENO);
+        // TODO(agf): Do we need to close both of these?
+        // STDOUT_FILENO
+        // presumably STDIN_FILENO
+
+        // Read from teh pipe and do something...
+        
+        // This is just an example
+        execvp(first_command->next->tokens[0], first_command->next->tokens);
+    }
+}
+
+/* Print a prompt containing the username and current working directory. */
 void print_prompt() {
     char cwd[1024];
     getcwd(cwd, sizeof(cwd));
     printf("%s:%s>", getlogin(), cwd);
 }
 
-// // left_pipe communicates between the previous command and this command
-// // The first call should be handle_commands(first_command, NULL, 1)
-// void handle_commands(command * first_command, int * left_pipe, int * right_pipe, pid_t fork_id) {
-//     // If fork_id != 0 (i.e. parent process), then set up a pipe for the next
-//     // command and fork the next command
-//     // If fork_id == 0 (i.e. child process), then work with left_pipe and execute command
-// 
-//     if (fork_id != 0) {
-//         // Parent process
-//         if (first_command->next) {
-//             int pipefd[2];
-//             pid_t cpid;
-//     
-//             if (pipe(pipefd) == -1) {
-//                 // TODO: print error
-//                 exit(EXIT_FAILURE);
-//             }
-//     
-//             cpid = fork();
-// 
-//             if (cpid < 0) {
-//                 // TODO: print error
-//                 exit(EXIT_FAILURE);
-//             }
-// 
-//             if (cpid != 0) {
-//                 // Still parent process
-//                 // Parent process
-//                 // Close unused read end.
-//                 close(pipefd[0]);
-//         
-//                 // Use the write end instead of STDOUT
-//                 dup2(pipefd[1], STDOUT_FILENO);
-//             }
-// 
-//             handle_commands(first_command->next, &pipefd, cpid);
-//         }
-//         // Wait for child
-//         wait(NULL);
-//     } else {
-//         // Child process
-//         if (left_pipe) {
-//             // Close unused write end
-//             close(left_pipe[1]);
-//             // Use read end of STDIN / take stdin from read end
-//             dup2(left_pipe[0], STDIN_FILENO);
-//             // TODO(agf): Do we need to close both of these?
-//         }
-//         // TOOD(agf): Make this a separate function
-//         execvp(first_command->tokens[0], first_command->tokens);
-//     }
-// 
-//     // This was the original code
-//     int pipefd[2];
-//     
-//     pid_t cpid;
-// 
-//     if (pipe(pipefd) == -1) {
-//         // TODO: print error
-//         exit(EXIT_FAILURE);
-//     }
-// 
-//     cpid = fork();
-//     
-//     if (cpid < 0) {
-//         // TODO: print error
-//         exit(EXIT_FAILURE);
-//     }
-// 
-//     if (cpid != 0) {
-//         // Parent process
-//         // Close unused read end.
-//         close(pipefd[0]);
-// 
-//         // Use the write end instead of STDOUT
-//         dup2(pipefd[1], STDOUT_FILENO);
-// 
-//         // This is just an example
-//         execvp(first_command->tokens[0], first_command->tokens);
-// 
-//         // Wait for child
-//         wait(NULL);
-//         // Maybe our exit status should depend on the child's exit status
-//     } else {
-//         // Child process
-//         // Close unused write end.
-//         close(pipefd[1]);
-// 
-//         // Use the read end instead of STDIN / take stdin from read end
-//         dup2(pipefd[0], STDIN_FILENO);
-//         // TODO(agf): Do we need to close both of these?
-//         // STDOUT_FILENO
-//         // presumably STDIN_FILENO
-// 
-//         // Read from teh pipe and do something...
-//         
-//         // This is just an example
-//         execvp(first_command->next->tokens[0], first_command->next->tokens);
-//     }
-// }
+/*
+ * Given an array of string pointers, a source string, and the number of tokens
+ * to make from the string,
+ * create new strings to represent each token and set the array elements
+ * to point to them. 
+ * Recognize newlines and string termination characters as end of string.
+ * If too many or too few tokens are found, report the error to stderr and exit.
+ */
+void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
+    char *iter = src;
+    char *begin = src;
+    int token_no = 0;
+    char seen_char = 0;
 
-// int main(void) {   
-//     // // Seems to work
-//     // {
-//     //     command * cmd1 = new_command();
-//     //     cmd1->tokens = malloc(4 * sizeof(char *));
-//     //     cmd1->tokens[0] = "grep";
-//     //     cmd1->tokens[1] = "fork";
-//     //     cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-//     //     cmd1->tokens[3] = NULL;
-//     //     handle_commands(cmd1, NULL);
-//     // }
-// 
-//     // Seems to work
-//     {
-//         command * cmd1 = new_command();
-//         command * cmd2 = new_command();
-//         cmd1->next = cmd2;
-//         cmd1->tokens = malloc(3 * sizeof(char *));
-//         cmd1->tokens[0] = "cat";
-//         cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-//         cmd1->tokens[2] = NULL;
-//         cmd2->tokens = malloc(3 * sizeof(char *));
-//         cmd2->tokens[0] = "grep";
-//         cmd2->tokens[1] = "fork";
-//         cmd2->tokens[2] = NULL;
-//         handle_commands(cmd1, NULL);
-//     }
-// 
-//     // {
-//     //     command * cmd1 = new_command();
-//     //     command * cmd2 = new_command();
-//     //     command * cmd3 = new_command();
-//     //     cmd1->next = cmd2;
-//     //     cmd2->next = cmd3;
-//     //     cmd1->tokens = malloc(3 * sizeof(char *));
-//     //     cmd1->tokens[0] = "cat";
-//     //     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-//     //     cmd1->tokens[2] = NULL;
-//     //     cmd2->tokens = malloc(3 * sizeof(char *));
-//     //     cmd2->tokens[0] = "grep";
-//     //     cmd2->tokens[1] = "fork";
-//     //     cmd2->tokens[2] = NULL;
-//     //     cmd3->tokens = malloc(3 * sizeof(char *));
-//     //     cmd3->tokens[0] = "grep";
-//     //     cmd3->tokens[1] = "and";
-//     //     cmd3->tokens[2] = NULL;
-//     //     handle_commands(cmd1, NULL);
-//     // }
-// }
+    while (iter <= end) {
 
+        /* if double quote, skip to next double quote */
+        if (*iter == '"') {
+            iter++;
+            while (*iter != '"') {
+                iter++;
+            }
+            seen_char = 1;
+            iter++;
+        }
+
+        /* whitespace */
+        else if (*iter == ' ' || *iter == '\t' || 
+                 *iter == '\n' || *iter == '\0' || iter == end) {
+            /* if leading whitespace, crop it */
+            if (seen_char == 0) {
+                iter++;
+                begin++;
+            }
+            /* otherwise, copy the preceding token into the array */
+            else {
+                if (token_no >= n_tokens) {
+                    fprintf(stderr, "Too many tokens for array\n");
+                    exit(1);
+                }
+
+                int len = (iter - begin);
+                dst[token_no] = (char *) malloc(len + 1);
+                memcpy(dst[token_no], begin, len);
+                dst[token_no][len] = '\0';
+
+                token_no++;
+                iter++;
+                begin = iter;
+                seen_char = 0;
+            }
+        }
+
+        /* if other character, set seen_char and increment iter */
+        else {
+            seen_char = 1;
+            iter++;
+        }
+    }
+
+    if (token_no < n_tokens) {
+        fprintf(stderr, "Not enough tokens for array\n");
+        exit(1);
+    }
+}
+
+/*
+ * Given a string from the command line, translate it into a linked list
+ * of cmd_struct's.
+ * First tokenize the string according to whitespace and double quotes,
+ * then structurize the tokens,
+ * structures demarked by pipes ("|") and redirects ("<", ">").
+ */
 command * structure_cmds(char * cmd_str) {
     char *begin = cmd_str;
     char *iter = cmd_str;
@@ -511,75 +393,88 @@ command * structure_cmds(char * cmd_str) {
     return NULL;
 }
 
-void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
-    char *iter = src;
-    char *begin = src;
-    int token_no = 0;
-    char seen_char = 0;
+void test1() {
+    command * cmd1 = new_command();
+    cmd1->tokens = malloc(4 * sizeof(char *));
+    cmd1->tokens[0] = "grep";
+    cmd1->tokens[1] = "fork";
+    cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+    cmd1->tokens[3] = NULL;
+    handle_commands(cmd1, NULL);
+}
 
-    while (iter <= end) {
+void test2() {   
+    command * cmd1 = new_command();
+    command * cmd2 = new_command();
+    cmd1->next = cmd2;
+    cmd1->tokens = malloc(3 * sizeof(char *));
+    cmd1->tokens[0] = "cat";
+    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+    cmd1->tokens[2] = NULL;
+    cmd2->tokens = malloc(3 * sizeof(char *));
+    cmd2->tokens[0] = "grep";
+    cmd2->tokens[1] = "fork";
+    cmd2->tokens[2] = NULL;
+    handle_commands(cmd1, NULL);
+}
 
-        /* if double quote, skip to next double quote */
-        if (*iter == '"') {
-            iter++;
-            while (*iter != '"') {
-                iter++;
-            }
-            seen_char = 1;
-            iter++;
-        }
+void test2_v2() {   
+    command * cmd1 = new_command();
+    command * cmd2 = new_command();
+    cmd1->next = cmd2;
+    cmd1->tokens = malloc(3 * sizeof(char *));
+    cmd1->tokens[0] = "cat";
+    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+    cmd1->tokens[2] = NULL;
+    cmd2->tokens = malloc(3 * sizeof(char *));
+    cmd2->tokens[0] = "grep";
+    cmd2->tokens[1] = "fork";
+    cmd2->tokens[2] = NULL;
+    handle_commands2(cmd1, NULL);
+}
 
-        /* whitespace */
-        else if (*iter == ' ' || *iter == '\t' || 
-                 *iter == '\n' || *iter == '\0' || iter == end) {
-            /* if leading whitespace, crop it */
-            if (seen_char == 0) {
-                iter++;
-                begin++;
-            }
-            /* otherwise, copy the preceding token into the array */
-            else {
-                if (token_no >= n_tokens) {
-                    fprintf(stderr, "Too many tokens for array\n");
-                    exit(1);
-                }
+void test3() {
+    command * cmd1 = new_command();
+    command * cmd2 = new_command();
+    command * cmd3 = new_command();
+    cmd1->next = cmd2;
+    cmd2->next = cmd3;
+    cmd1->tokens = malloc(3 * sizeof(char *));
+    cmd1->tokens[0] = "cat";
+    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+    cmd1->tokens[2] = NULL;
+    cmd2->tokens = malloc(3 * sizeof(char *));
+    cmd2->tokens[0] = "grep";
+    cmd2->tokens[1] = "fork";
+    cmd2->tokens[2] = NULL;
+    cmd3->tokens = malloc(3 * sizeof(char *));
+    cmd3->tokens[0] = "grep";
+    cmd3->tokens[1] = "and";
+    cmd3->tokens[2] = NULL;
+    handle_commands(cmd1, NULL);
+}
 
-                int len = (iter - begin);
-                dst[token_no] = (char *) malloc(len + 1);
-                memcpy(dst[token_no], begin, len);
-                dst[token_no][len] = '\0';
+void mainloop() {
+    /* maximum bytes in an input line */
+    int max_len = 1024;
+    char cmd_str[max_len];
 
-                token_no++;
-                iter++;
-                begin = iter;
-                seen_char = 0;
-            }
-        }
+    command * cmd_list;
+    while(1) {
+        print_prompt();
 
-        /* if other character, set seen_char and increment iter */
-        else {
-            seen_char = 1;
-            iter++;
-        }
-    }
+        fgets(cmd_str, max_len, stdin);
 
-    if (token_no < n_tokens) {
-        fprintf(stderr, "Not enough tokens for array\n");
-        exit(1);
+        cmd_list = structure_cmds(cmd_str);
+        print_cmd_list(cmd_list);
     }
 }
 
-// int main(void) {   
-//     command * cmd1 = new_command();
-//     command * cmd2 = new_command();
-//     cmd1->next = cmd2;
-//     cmd1->tokens = malloc(3 * sizeof(char *));
-//     cmd1->tokens[0] = "cat";
-//     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-//     cmd1->tokens[2] = NULL;
-//     cmd2->tokens = malloc(3 * sizeof(char *));
-//     cmd2->tokens[0] = "grep";
-//     cmd2->tokens[1] = "fork";
-//     cmd2->tokens[2] = NULL;
-//     handle_commands(cmd1);
-// }
+int main(void) {
+    mainloop();
+    // test1();
+    // test2();
+    // test2_v2();
+    // test3();
+    return 0;
+}
