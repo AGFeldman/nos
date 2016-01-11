@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 typedef struct command {
     char ** tokens;
@@ -73,6 +75,134 @@ int main(void) {
 
     return 0;
 }
+
+void cleanup_commands(command * first_command) {
+    if (!first_command) {
+        return;
+    }
+    command * next_command = first_command->next;
+
+    char ** token_pointer = first_command->tokens;
+    while (token_pointer) {
+        free(*token_pointer);
+        token_pointer++;
+    }
+
+    if (first_command->tokens) {
+        free(first_command->tokens);
+    }
+    if (first_command->input) {
+        free(first_command->input);
+    }
+    if (first_command->output) {
+        free(first_command->output);
+    }
+    if (first_command->next) {
+        free(first_command->next);
+    }
+
+    cleanup_commands(next_command);
+}
+
+// left_pipe communicates between the previous command and this command
+void handle_commands(command * first_command) {
+    int pipefd[2];
+    
+    pid_t cpid;
+
+    if (pipe(pipefd) == -1) {
+        // TODO: print error
+        exit(EXIT_FAILURE);
+    }
+
+    cpid = fork();
+    
+    if (cpid < 0) {
+        // TODO: print error
+        exit(EXIT_FAILURE);
+    }
+
+    if (cpid != 0) {
+        // Parent process
+        // Close unused read end.
+        close(pipefd[0]);
+
+        // Use the write end instead of STDOUT
+        dup2(pipefd[1], STDOUT_FILENO);
+
+        // This is just an example
+        execvp(first_command->tokens[0], first_command->tokens);
+
+        // Wait for child
+        wait(NULL);
+        // Maybe our exit status should depend on the child's exit status
+    } else {
+        // Child process
+        // Close unused write end.
+        close(pipefd[1]);
+
+        // Use the read end instead of STDIN / take stdin from read end
+        dup2(pipefd[0], STDIN_FILENO);
+        // TODO(agf): Do we need to close both of these?
+        // STDOUT_FILENO
+        // presumably STDIN_FILENO
+
+        // Read from teh pipe and do something...
+        
+        // This is just an example
+        execvp(first_command->next->tokens[0], first_command->next->tokens);
+    }
+}
+
+// int main(void) {
+//     command * cmds = new_command();
+//     free(cmds);
+// 
+//     // execlp("/bin/sh","/bin/sh", "-c", "ls -l /home/aaron/Dropbox/Coding/rpad/*.py", (char *)NULL);
+//     // execlp("/bin/ls", "/bin/ls", "-l /home/aaron/Dropbox/Coding/rpad/", (char *)NULL);  // doesn't work
+//     // execlp("/bin/ls", "/bin/ls", "-l", "/home/aaron/Dropbox/Coding/rpad/", (char *)NULL);
+//     
+//     // // Pretend that our list of strings is ["a", "aa", "aaa", ..., n * "a"]
+//     // int n = 10;
+//     // char ** argv = (char **) malloc((n + 2) * sizeof(char *));
+//     // argv[0] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/test";
+//     // int i;
+//     // int j;
+//     // for (i = 1; i <= n; i++) {
+//     //     argv[i] = (char *) malloc((n + 1) * sizeof(char));
+//     //     for (j = 0; j < i; j++) {
+//     //         argv[i][j] = 'n';
+//     //     }
+//     //     argv[i][i] = '\0';
+//     // } 
+//     // argv[n + 1] = NULL;
+// 
+//     // // char * argv[] = {"/bin/ls", "-l", "/home/aaron/Dropbox/Coding/rpad/", NULL};
+//     // char * envp[] = {NULL};
+//     // execve(argv[0], argv, envp); 
+// 
+//     // char * argv2[] = {"ls", "-l", "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/", NULL};
+//     // execvp(argv2[0], argv2);
+// 
+//     // char * argv3[] = {"ls", "-l", "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/", NULL};
+//     // execvp(argv3[0], argv3);
+//     
+//     // TODO(agf): Set up a cmds sequence with two structs of commands, 
+//     // then call handle_commands
+//     
+//     command * cmd1 = new_command();
+//     command * cmd2 = new_command();
+//     cmd1->next = cmd2;
+//     cmd1->tokens = malloc(3 * sizeof(char *));
+//     cmd1->tokens[0] = "cat";
+//     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+//     cmd1->tokens[2] = NULL;
+//     cmd2->tokens = malloc(3 * sizeof(char *));
+//     cmd2->tokens[0] = "grep";
+//     cmd2->tokens[1] = "fork";
+//     cmd2->tokens[2] = NULL;
+//     handle_commands(cmd1);
+// }
 
 void print_prompt() {
     char cwd[1024];
@@ -271,17 +401,17 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// int main(void) {   
+//     command * cmd1 = new_command();
+//     command * cmd2 = new_command();
+//     cmd1->next = cmd2;
+//     cmd1->tokens = malloc(3 * sizeof(char *));
+//     cmd1->tokens[0] = "cat";
+//     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+//     cmd1->tokens[2] = NULL;
+//     cmd2->tokens = malloc(3 * sizeof(char *));
+//     cmd2->tokens[0] = "grep";
+//     cmd2->tokens[1] = "fork";
+//     cmd2->tokens[2] = NULL;
+//     handle_commands(cmd1);
+// }
