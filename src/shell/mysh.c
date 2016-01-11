@@ -72,7 +72,6 @@ int main(void) {
         print_cmd_list(cmd_list);
     }
 
-
     return 0;
 }
 
@@ -104,53 +103,71 @@ void cleanup_commands(command * first_command) {
     cleanup_commands(next_command);
 }
 
-// left_pipe communicates between the previous command and this command
-void handle_commands(command * first_command) {
-    int pipefd[2];
-    
+/*
+handle_commands(first_command, "left_pipe")
+    Create a new pipe
+    Fork:
+    -> child closes read end of the new pipe, replaces its stdout with the write end, executes
+    -> parent calls handle_commands(first_command->next, new_pipe), then closes both ends of new_pipe
+        Tracing into handle_commands: Create a new new pipe
+        Fork:
+        -> child replaces its stdin with the read end of the new pipe, closes read end of the new new pipe, and replaces its stdout with the write end of the new new pipe, and executes
+        -> parent calls handle_commands(first_command->next->next, new new pipe), then closes both ends of new new pipe
+
+        Fork:
+        -> child executes
+        -> parent calls handle_commands
+*/
+
+void handle_commands(command * cmd, int * left_pipe) {
+    int right_pipe[2];
     pid_t cpid;
 
-    if (pipe(pipefd) == -1) {
-        // TODO: print error
-        exit(EXIT_FAILURE);
+    if (cmd->next) {
+        if (pipe(right_pipe) == -1) {
+            // TODO: print failure
+            exit(EXIT_FAILURE);
+        }
     }
 
-    cpid = fork();
-    
+    cpid = fork();   
     if (cpid < 0) {
         // TODO: print error
         exit(EXIT_FAILURE);
     }
-
-    if (cpid != 0) {
-        // Parent process
-        // Close unused read end.
-        close(pipefd[0]);
-
-        // Use the write end instead of STDOUT
-        dup2(pipefd[1], STDOUT_FILENO);
-
-        // This is just an example
-        execvp(first_command->tokens[0], first_command->tokens);
-
-        // Wait for child
-        wait(NULL);
-        // Maybe our exit status should depend on the child's exit status
-    } else {
+    if (cpid == 0) {
         // Child process
-        // Close unused write end.
-        close(pipefd[1]);
-
-        // Use the read end instead of STDIN / take stdin from read end
-        dup2(pipefd[0], STDIN_FILENO);
-        // TODO(agf): Do we need to close both of these?
-        // STDOUT_FILENO
-        // presumably STDIN_FILENO
-
-        // Read from teh pipe and do something...
-        
-        // This is just an example
-        execvp(first_command->next->tokens[0], first_command->next->tokens);
+        if (left_pipe) {
+            // Use the read end instead of STDIN
+            dup2(left_pipe[0], STDIN_FILENO);
+            // TODO(agf): Might need to close something
+        }
+        if (cmd->next) {
+            // Close unused read end
+            close(right_pipe[0]);
+            // Use the write end instead of STDOUT
+            dup2(right_pipe[1], STDOUT_FILENO);
+        }
+        execvp(cmd->tokens[0], cmd->tokens);
+    } else {
+        if (cmd->next) {
+            handle_commands(cmd->next, right_pipe);
+            // TODO: The pipe is only used to communicate between children, so close both ends
+            // close(right_pipe[0]);
+            // close(right_pipe[1]);   
+            // TODO(agf): Why wait here, and not later?
+            // wait(NULL);
+        }
+        waitpid(cpid, NULL, 0);
+        // // TODO(agf): Is this right?
+        // else {
+        //     wait(NULL);
+        // }
+        // if (cmd->next && left_pipe) {
+        //     wait(NULL);
+        // }
+        // Wait for child process
+        // wait(NULL);
     }
 }
 
@@ -209,6 +226,157 @@ void print_prompt() {
     getcwd(cwd, sizeof(cwd));
     printf("%s:%s>", getlogin(), cwd);
 }
+
+// // left_pipe communicates between the previous command and this command
+// // The first call should be handle_commands(first_command, NULL, 1)
+// void handle_commands(command * first_command, int * left_pipe, int * right_pipe, pid_t fork_id) {
+//     // If fork_id != 0 (i.e. parent process), then set up a pipe for the next
+//     // command and fork the next command
+//     // If fork_id == 0 (i.e. child process), then work with left_pipe and execute command
+// 
+//     if (fork_id != 0) {
+//         // Parent process
+//         if (first_command->next) {
+//             int pipefd[2];
+//             pid_t cpid;
+//     
+//             if (pipe(pipefd) == -1) {
+//                 // TODO: print error
+//                 exit(EXIT_FAILURE);
+//             }
+//     
+//             cpid = fork();
+// 
+//             if (cpid < 0) {
+//                 // TODO: print error
+//                 exit(EXIT_FAILURE);
+//             }
+// 
+//             if (cpid != 0) {
+//                 // Still parent process
+//                 // Parent process
+//                 // Close unused read end.
+//                 close(pipefd[0]);
+//         
+//                 // Use the write end instead of STDOUT
+//                 dup2(pipefd[1], STDOUT_FILENO);
+//             }
+// 
+//             handle_commands(first_command->next, &pipefd, cpid);
+//         }
+//         // Wait for child
+//         wait(NULL);
+//     } else {
+//         // Child process
+//         if (left_pipe) {
+//             // Close unused write end
+//             close(left_pipe[1]);
+//             // Use read end of STDIN / take stdin from read end
+//             dup2(left_pipe[0], STDIN_FILENO);
+//             // TODO(agf): Do we need to close both of these?
+//         }
+//         // TOOD(agf): Make this a separate function
+//         execvp(first_command->tokens[0], first_command->tokens);
+//     }
+// 
+//     // This was the original code
+//     int pipefd[2];
+//     
+//     pid_t cpid;
+// 
+//     if (pipe(pipefd) == -1) {
+//         // TODO: print error
+//         exit(EXIT_FAILURE);
+//     }
+// 
+//     cpid = fork();
+//     
+//     if (cpid < 0) {
+//         // TODO: print error
+//         exit(EXIT_FAILURE);
+//     }
+// 
+//     if (cpid != 0) {
+//         // Parent process
+//         // Close unused read end.
+//         close(pipefd[0]);
+// 
+//         // Use the write end instead of STDOUT
+//         dup2(pipefd[1], STDOUT_FILENO);
+// 
+//         // This is just an example
+//         execvp(first_command->tokens[0], first_command->tokens);
+// 
+//         // Wait for child
+//         wait(NULL);
+//         // Maybe our exit status should depend on the child's exit status
+//     } else {
+//         // Child process
+//         // Close unused write end.
+//         close(pipefd[1]);
+// 
+//         // Use the read end instead of STDIN / take stdin from read end
+//         dup2(pipefd[0], STDIN_FILENO);
+//         // TODO(agf): Do we need to close both of these?
+//         // STDOUT_FILENO
+//         // presumably STDIN_FILENO
+// 
+//         // Read from teh pipe and do something...
+//         
+//         // This is just an example
+//         execvp(first_command->next->tokens[0], first_command->next->tokens);
+//     }
+// }
+
+// int main(void) {   
+//     // // Seems to work
+//     // {
+//     //     command * cmd1 = new_command();
+//     //     cmd1->tokens = malloc(4 * sizeof(char *));
+//     //     cmd1->tokens[0] = "grep";
+//     //     cmd1->tokens[1] = "fork";
+//     //     cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+//     //     cmd1->tokens[3] = NULL;
+//     //     handle_commands(cmd1, NULL);
+//     // }
+// 
+//     // Seems to work
+//     {
+//         command * cmd1 = new_command();
+//         command * cmd2 = new_command();
+//         cmd1->next = cmd2;
+//         cmd1->tokens = malloc(3 * sizeof(char *));
+//         cmd1->tokens[0] = "cat";
+//         cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+//         cmd1->tokens[2] = NULL;
+//         cmd2->tokens = malloc(3 * sizeof(char *));
+//         cmd2->tokens[0] = "grep";
+//         cmd2->tokens[1] = "fork";
+//         cmd2->tokens[2] = NULL;
+//         handle_commands(cmd1, NULL);
+//     }
+// 
+//     // {
+//     //     command * cmd1 = new_command();
+//     //     command * cmd2 = new_command();
+//     //     command * cmd3 = new_command();
+//     //     cmd1->next = cmd2;
+//     //     cmd2->next = cmd3;
+//     //     cmd1->tokens = malloc(3 * sizeof(char *));
+//     //     cmd1->tokens[0] = "cat";
+//     //     cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+//     //     cmd1->tokens[2] = NULL;
+//     //     cmd2->tokens = malloc(3 * sizeof(char *));
+//     //     cmd2->tokens[0] = "grep";
+//     //     cmd2->tokens[1] = "fork";
+//     //     cmd2->tokens[2] = NULL;
+//     //     cmd3->tokens = malloc(3 * sizeof(char *));
+//     //     cmd3->tokens[0] = "grep";
+//     //     cmd3->tokens[1] = "and";
+//     //     cmd3->tokens[2] = NULL;
+//     //     handle_commands(cmd1, NULL);
+//     // }
+// }
 
 command * structure_cmds(char * cmd_str) {
     char *begin = cmd_str;
