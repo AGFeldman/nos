@@ -63,21 +63,13 @@ void cleanup_commands(command * first_command) {
     cleanup_commands(next_command);
 }
 
-/*
-handle_commands(first_command, "left_pipe")
-    Create a new pipe
-    Fork:
-    -> child closes read end of the new pipe, replaces its stdout with the write end, executes
-    -> parent calls handle_commands(first_command->next, new_pipe), then closes both ends of new_pipe
-        Tracing into handle_commands: Create a new new pipe
-        Fork:
-        -> child replaces its stdin with the read end of the new pipe, closes read end of the new new pipe, and replaces its stdout with the write end of the new new pipe, and executes
-        -> parent calls handle_commands(first_command->next->next, new new pipe), then closes both ends of new new pipe
+void execute_command(command * cmd) {
+    execvp(cmd->tokens[0], cmd->tokens);
+}
 
-        Fork:
-        -> child executes
-        -> parent calls handle_commands
-*/
+/*
+ * Execute a linked list of commands, and handle piping between the commands.
+ */
 void handle_commands(command * cmd, int * left_pipe) {
     int right_pipe[2];
     pid_t cpid;
@@ -99,7 +91,8 @@ void handle_commands(command * cmd, int * left_pipe) {
         if (left_pipe) {
             // Use the read end instead of STDIN
             dup2(left_pipe[0], STDIN_FILENO);
-            // TODO(agf): Might need to close something
+            // Close the unused write end
+            close(left_pipe[1]);
         }
         if (cmd->next) {
             // Close unused read end
@@ -107,76 +100,18 @@ void handle_commands(command * cmd, int * left_pipe) {
             // Use the write end instead of STDOUT
             dup2(right_pipe[1], STDOUT_FILENO);
         }
-        execvp(cmd->tokens[0], cmd->tokens);
+        execute_command(cmd);
     } else {
+        // Parent process
+        if (left_pipe) {
+            close(left_pipe[0]);
+            close(left_pipe[1]);
+        }
+        // Parent process
         if (cmd->next) {
             handle_commands(cmd->next, right_pipe);
-            // TODO: The pipe is only used to communicate between children, so close both ends
-            // close(right_pipe[0]);
-            // close(right_pipe[1]);   
-            // TODO(agf): Why wait here, and not later?
-            // wait(NULL);
         }
-        waitpid(cpid, NULL, 0);
-        // // TODO(agf): Is this right?
-        // else {
-        //     wait(NULL);
-        // }
-        // if (cmd->next && left_pipe) {
-        //     wait(NULL);
-        // }
-        // Wait for child process
-        // wait(NULL);
-    }
-}
-
-// This should correctly handle a list of exactly two commands
-void handle_commands2(command * first_command, int * left_pipe) {
-    int pipefd[2];
-    
-    pid_t cpid;
-
-    if (pipe(pipefd) == -1) {
-        // TODO: print error
-        exit(EXIT_FAILURE);
-    }
-
-    cpid = fork();
-    
-    if (cpid < 0) {
-        // TODO: print error
-        exit(EXIT_FAILURE);
-    }
-
-    if (cpid != 0) {
-        // Parent process
-        // Close unused read end.
-        close(pipefd[0]);
-
-        // Use the write end instead of STDOUT
-        dup2(pipefd[1], STDOUT_FILENO);
-
-        // This is just an example
-        execvp(first_command->tokens[0], first_command->tokens);
-
-        // Wait for child
-        wait(NULL);
-        // Maybe our exit status should depend on the child's exit status
-    } else {
-        // Child process
-        // Close unused write end.
-        close(pipefd[1]);
-
-        // Use the read end instead of STDIN / take stdin from read end
-        dup2(pipefd[0], STDIN_FILENO);
-        // TODO(agf): Do we need to close both of these?
-        // STDOUT_FILENO
-        // presumably STDIN_FILENO
-
-        // Read from teh pipe and do something...
-        
-        // This is just an example
-        execvp(first_command->next->tokens[0], first_command->next->tokens);
+        waitpid(cpid, NULL, 0); 
     }
 }
 
@@ -418,21 +353,6 @@ void test2() {
     handle_commands(cmd1, NULL);
 }
 
-void test2_v2() {   
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    cmd1->next = cmd2;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "fork";
-    cmd2->tokens[2] = NULL;
-    handle_commands2(cmd1, NULL);
-}
-
 void test3() {
     command * cmd1 = new_command();
     command * cmd2 = new_command();
@@ -445,12 +365,39 @@ void test3() {
     cmd1->tokens[2] = NULL;
     cmd2->tokens = malloc(3 * sizeof(char *));
     cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "fork";
+    cmd2->tokens[1] = "max";
     cmd2->tokens[2] = NULL;
     cmd3->tokens = malloc(3 * sizeof(char *));
     cmd3->tokens[0] = "grep";
-    cmd3->tokens[1] = "and";
+    cmd3->tokens[1] = "len";
     cmd3->tokens[2] = NULL;
+    handle_commands(cmd1, NULL);
+}
+
+void test4() {
+    command * cmd1 = new_command();
+    command * cmd2 = new_command();
+    command * cmd3 = new_command();
+    command * cmd4 = new_command();
+    cmd1->next = cmd2;
+    cmd2->next = cmd3;
+    cmd3->next = cmd4;
+    cmd1->tokens = malloc(3 * sizeof(char *));
+    cmd1->tokens[0] = "cat";
+    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
+    cmd1->tokens[2] = NULL;
+    cmd2->tokens = malloc(3 * sizeof(char *));
+    cmd2->tokens[0] = "grep";
+    cmd2->tokens[1] = "max";
+    cmd2->tokens[2] = NULL;
+    cmd3->tokens = malloc(3 * sizeof(char *));
+    cmd3->tokens[0] = "grep";
+    cmd3->tokens[1] = "len";
+    cmd3->tokens[2] = NULL;
+    cmd4->tokens = malloc(3 * sizeof(char *));
+    cmd4->tokens[0] = "grep";
+    cmd4->tokens[1] = "str";
+    cmd4->tokens[2] = NULL;
     handle_commands(cmd1, NULL);
 }
 
@@ -471,10 +418,10 @@ void mainloop() {
 }
 
 int main(void) {
-    mainloop();
+    // mainloop();
     // test1();
     // test2();
-    // test2_v2();
     // test3();
+    test4();
     return 0;
 }
