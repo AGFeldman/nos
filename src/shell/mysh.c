@@ -210,6 +210,7 @@ command * structure_cmds(char * cmd_str) {
 
         iter++;
     }
+    return NULL;
 }
 
 void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
