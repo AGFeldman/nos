@@ -81,6 +81,7 @@ void handle_commands(command * cmd, int * left_pipe) {
     }
 
     int input_fd;
+    int output_fd;
     int right_pipe[2];
     pid_t cpid;
 
@@ -100,6 +101,7 @@ void handle_commands(command * cmd, int * left_pipe) {
     }
     if (cpid == 0) {
         // Child process
+        // Determine where to get input
         if (cmd->input) {
             assert(!left_pipe);
             input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
@@ -115,20 +117,30 @@ void handle_commands(command * cmd, int * left_pipe) {
                 exit(EXIT_FAILURE);
             }
             dup2(input_fd, STDIN_FILENO);
-        }
-
-        if (left_pipe) {
+        } else if (left_pipe) {
             // Use the read end instead of STDIN
             dup2(left_pipe[0], STDIN_FILENO);
             // Close the unused write end
             close(left_pipe[1]);
         }
-        if (cmd->next) {
+
+        // Determine where to send output
+        if (cmd->output) {
+            assert(!cmd->next);
+            output_fd = open(cmd->output, O_CREAT | O_WRONLY | O_CLOEXEC);
+            if (output_fd < 0) {
+                fprintf(stderr, "mysh: An error occurred while redirecting to file \"%s\"\n", cmd->output);
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            dup2(output_fd, STDOUT_FILENO);
+        } else if (cmd->next) {
             // Close unused read end
             close(right_pipe[0]);
             // Use the write end instead of STDOUT
             dup2(right_pipe[1], STDOUT_FILENO);
         }
+
         execute_command(cmd);
     } else {
         // Parent process
