@@ -86,25 +86,32 @@ void handle_commands(command * cmd, int * left_pipe) {
 
     if (cmd->next) {
         if (pipe(right_pipe) == -1) {
-            // TODO: print failure
+            fprintf(stderr, "mysh: A fatal error occurred\n");
+            perror("pipe");
             exit(EXIT_FAILURE);
         }
     }
 
     cpid = fork();   
     if (cpid < 0) {
-        // TODO: print error
+        fprintf(stderr, "mysh: A fatal error occurred\n");
+        perror("fork");
         exit(EXIT_FAILURE);
     }
     if (cpid == 0) {
         // Child process
         if (cmd->input) {
             assert(!left_pipe);
-            printf("About to open <%s>\n", cmd->input);
             input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
             if (input_fd < 0) {
-                // TODO(agf): Standardize error msgs
-                printf("Failure opening file <%s>\n", cmd->input);
+                // TODO(agf): Try not to exit if we don't need to
+                // Maybe this could be done by checking for the file's existence
+                // when it is set as cmd->input
+                // TODO(agf): Note that error messages are taken from fish
+                fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
+                perror("open");
+                // TODO(agf): The child process exiting, does not cause the the
+                // parent to exit
                 exit(EXIT_FAILURE);
             }
             dup2(input_fd, STDIN_FILENO);
