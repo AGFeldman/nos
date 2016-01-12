@@ -35,6 +35,9 @@ void print_cmd_list(command * cmd_pt) {
     }
 }
 
+/*
+ * Free memory associated with a linked list of commands.
+ */
 void cleanup_commands(command * first_command) {
     if (!first_command) {
         return;
@@ -42,7 +45,7 @@ void cleanup_commands(command * first_command) {
     command * next_command = first_command->next;
 
     char ** token_pointer = first_command->tokens;
-    while (token_pointer) {
+    while (*token_pointer) {
         free(*token_pointer);
         token_pointer++;
     }
@@ -71,6 +74,10 @@ void execute_command(command * cmd) {
  * Execute a linked list of commands, and handle piping between the commands.
  */
 void handle_commands(command * cmd, int * left_pipe) {
+    if (!cmd) {
+        return;
+    }
+
     int right_pipe[2];
     pid_t cpid;
 
@@ -413,15 +420,16 @@ void mainloop() {
         fgets(cmd_str, max_len, stdin);
 
         cmd_list = structure_cmds(cmd_str);
-        print_cmd_list(cmd_list);
+        handle_commands(cmd_list, NULL);
+        cleanup_commands(cmd_list);
     }
 }
 
 int main(void) {
-    // mainloop();
+    mainloop();
     // test1();
     // test2();
     // test3();
-    test4();
+    // test4();
     return 0;
 }
