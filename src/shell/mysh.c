@@ -4,6 +4,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <assert.h>
+#include <fcntl.h>
 
 typedef struct command {
     char ** tokens;
@@ -67,7 +69,10 @@ void cleanup_commands(command * first_command) {
 }
 
 void execute_command(command * cmd) {
-    execvp(cmd->tokens[0], cmd->tokens);
+    if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
+        fprintf(stderr, "mysh: An error occurred while executing command \"%s\"\n", cmd->tokens[0]);
+        perror("execve");
+    }
 }
 
 /*
@@ -78,35 +83,67 @@ void handle_commands(command * cmd, int * left_pipe) {
         return;
     }
 
+    int input_fd;
+    int output_fd;
     int right_pipe[2];
     pid_t cpid;
 
     if (cmd->next) {
         if (pipe(right_pipe) == -1) {
-            // TODO: print failure
+            fprintf(stderr, "mysh: A fatal error occurred\n");
+            perror("pipe");
             exit(EXIT_FAILURE);
         }
     }
 
     cpid = fork();   
     if (cpid < 0) {
-        // TODO: print error
+        fprintf(stderr, "mysh: A fatal error occurred\n");
+        perror("fork");
         exit(EXIT_FAILURE);
     }
     if (cpid == 0) {
         // Child process
-        if (left_pipe) {
+        // Determine where to get input
+        if (cmd->input) {
+            assert(!left_pipe);
+            input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
+            if (input_fd < 0) {
+                // TODO(agf): Try not to exit if we don't need to
+                // Maybe this could be done by checking for the file's existence
+                // when it is set as cmd->input
+                // TODO(agf): Note that error messages are taken from fish
+                fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
+                perror("open");
+                // TODO(agf): The child process exiting, does not cause the
+                // parent to exit
+                exit(EXIT_FAILURE);
+            }
+            dup2(input_fd, STDIN_FILENO);
+        } else if (left_pipe) {
             // Use the read end instead of STDIN
             dup2(left_pipe[0], STDIN_FILENO);
             // Close the unused write end
             close(left_pipe[1]);
         }
-        if (cmd->next) {
+
+        // Determine where to send output
+        if (cmd->output) {
+            assert(!cmd->next);
+            output_fd = open(cmd->output, O_CREAT | O_WRONLY | O_CLOEXEC);
+            if (output_fd < 0) {
+                fprintf(stderr, "mysh: An error occurred while redirecting to file \"%s\"\n", cmd->output);
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+            dup2(output_fd, STDOUT_FILENO);
+        } else if (cmd->next) {
             // Close unused read end
             close(right_pipe[0]);
             // Use the write end instead of STDOUT
             dup2(right_pipe[1], STDOUT_FILENO);
         }
+
         execute_command(cmd);
     } else {
         // Parent process
