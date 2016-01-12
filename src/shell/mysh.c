@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 typedef struct command {
     char ** tokens;
@@ -68,6 +69,9 @@ void cleanup_commands(command * first_command) {
     cleanup_commands(next_command);
 }
 
+/*
+ * Attempt to execute the external command represented by cmd->tokens.
+ */
 void execute_command(command * cmd) {
     if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
         fprintf(stderr, "mysh: An error occurred while executing command \"%s\"\n", cmd->tokens[0]);
@@ -76,11 +80,45 @@ void execute_command(command * cmd) {
 }
 
 /*
- * Execute a linked list of commands, and handle piping between the commands.
+ * Return true if cmd->tokens represents an internal command.
  */
-void handle_commands(command * cmd, int * left_pipe) {
+bool is_internal_command(command * cmd) {
+    char * first_token = cmd->tokens[0];
+    return (strcmp(first_token, "cd") == 0 || strcmp(first_token, "exit") == 0);
+}
+
+/*
+ * If cmd->tokens represents an internal command, then execute it, handle any
+ * errors, and ignore any subsequent commands linked to by cmd->next.
+ */
+void handle_internal_command(command * cmd) {
+    char * first_token = cmd->tokens[0];
+    if (strcmp(first_token, "exit") == 0) {
+        exit(EXIT_SUCCESS);
+    } else if (strcmp(first_token, "cd") == 0) {
+        // tokens[1] is a valid dereference because tokens is always terminated
+        // by NULL
+        char * to_dir = cmd->tokens[1];
+        if (to_dir == NULL) {
+            to_dir = getenv("HOME");
+        }
+        if (chdir(to_dir) == -1) {
+            fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
+            perror("cd");
+        }
+    }
+}
+
+/*
+ * Execute a linked list of external commands, and handle piping between the
+ * commands.  Skip any internal commands that might exist in the linked list.
+ */
+void handle_external_commands(command * cmd, int * left_pipe) {
     if (!cmd) {
         return;
+    }
+    if (is_internal_command(cmd)) {
+        handle_external_commands(cmd->next, left_pipe);
     }
 
     int input_fd;
@@ -153,9 +191,21 @@ void handle_commands(command * cmd, int * left_pipe) {
         }
         // Parent process
         if (cmd->next) {
-            handle_commands(cmd->next, right_pipe);
+            handle_external_commands(cmd->next, right_pipe);
         }
         waitpid(cpid, NULL, 0); 
+    }
+}
+
+/*
+ * Determine if |cmd| is an internal or external command, and call the proper
+ * function to execute it.
+ */
+void handle_commands(command * cmd) {
+    if (is_internal_command(cmd)) {
+        handle_internal_command(cmd);
+    } else {
+        handle_external_commands(cmd, NULL);
     }
 }
 
@@ -379,7 +429,7 @@ void test1() {
     cmd1->tokens[1] = "fork";
     cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
     cmd1->tokens[3] = NULL;
-    handle_commands(cmd1, NULL);
+    handle_commands(cmd1);
 }
 
 void test2() {   
@@ -394,7 +444,7 @@ void test2() {
     cmd2->tokens[0] = "grep";
     cmd2->tokens[1] = "fork";
     cmd2->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
+    handle_commands(cmd1);
 }
 
 void test3() {
@@ -415,7 +465,7 @@ void test3() {
     cmd3->tokens[0] = "grep";
     cmd3->tokens[1] = "len";
     cmd3->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
+    handle_commands(cmd1);
 }
 
 void test4() {
@@ -442,7 +492,7 @@ void test4() {
     cmd4->tokens[0] = "grep";
     cmd4->tokens[1] = "str";
     cmd4->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
+    handle_commands(cmd1);
 }
 
 void mainloop() {
@@ -457,7 +507,7 @@ void mainloop() {
         fgets(cmd_str, max_len, stdin);
 
         cmd_list = structure_cmds(cmd_str);
-        handle_commands(cmd_list, NULL);
+        handle_commands(cmd_list);
         cleanup_commands(cmd_list);
     }
 }
