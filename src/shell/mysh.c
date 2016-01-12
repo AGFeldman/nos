@@ -4,6 +4,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <assert.h>
+#include <fcntl.h>
 
 typedef struct command {
     char ** tokens;
@@ -78,6 +80,7 @@ void handle_commands(command * cmd, int * left_pipe) {
         return;
     }
 
+    int input_fd;
     int right_pipe[2];
     pid_t cpid;
 
@@ -95,6 +98,18 @@ void handle_commands(command * cmd, int * left_pipe) {
     }
     if (cpid == 0) {
         // Child process
+        if (cmd->input) {
+            assert(!left_pipe);
+            printf("About to open <%s>\n", cmd->input);
+            input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
+            if (input_fd < 0) {
+                // TODO(agf): Standardize error msgs
+                printf("Failure opening file <%s>\n", cmd->input);
+                exit(EXIT_FAILURE);
+            }
+            dup2(input_fd, STDIN_FILENO);
+        }
+
         if (left_pipe) {
             // Use the read end instead of STDIN
             dup2(left_pipe[0], STDIN_FILENO);
