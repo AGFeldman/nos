@@ -69,7 +69,10 @@ void cleanup_commands(command * first_command) {
 }
 
 void execute_command(command * cmd) {
-    execvp(cmd->tokens[0], cmd->tokens);
+    if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
+        fprintf(stderr, "mysh: An error occurred while executing command \"%s\"\n", cmd->tokens[0]);
+        perror("execve");
+    }
 }
 
 /*
@@ -112,7 +115,7 @@ void handle_commands(command * cmd, int * left_pipe) {
                 // TODO(agf): Note that error messages are taken from fish
                 fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
                 perror("open");
-                // TODO(agf): The child process exiting, does not cause the the
+                // TODO(agf): The child process exiting, does not cause the
                 // parent to exit
                 exit(EXIT_FAILURE);
             }
