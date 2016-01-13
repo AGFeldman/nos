@@ -209,6 +209,13 @@ void print_prompt() {
     printf("%s:%s>", getlogin(), cwd);
 }
 
+/*
+ * Copy up to n chars from src to dst, skipping any bad chars.
+ * Terminate with an end-of-string character. 
+ * Perform no checks of input, so will crash if dst is not long enough
+ * to hold all non-bad chars of src and an end-of-string character.
+ * Return dst.
+ */
 char * copy_except_x(char * dst, char * src, int len, char bad) {
     int i, j = 0;
     for (i = 0; i < len; i++) {
