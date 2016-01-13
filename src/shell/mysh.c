@@ -83,11 +83,40 @@ void execute_command(command * cmd) {
 }
 
 /*
- * Return true if cmd->tokens represents an internal command.
+ * Handle internal `exit` command: Exit the shell.
  */
-bool is_internal_command(command * cmd) {
-    char * first_token = cmd->tokens[0];
-    return (strcmp(first_token, "cd") == 0 || strcmp(first_token, "exit") == 0);
+void command_exit() {
+    exit(EXIT_SUCCESS);
+}
+
+/*
+ * Handle internal `cd` command: Change the working directory
+ */
+void command_cd(command * cmd) {
+    // tokens[1] is a valid dereference because tokens is always terminated by
+    // NULL
+    char * to_dir = cmd->tokens[1];
+    if (to_dir == NULL) {
+        to_dir = getenv("HOME");
+    }
+    if (chdir(to_dir) == -1) {
+        fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
+        perror("cd");
+    }
+}
+
+/*
+ * Handle internal `history` command: Print history of commands entered into
+ * the shell.
+ */
+void command_history() {
+    HIST_ENTRY ** hist = history_list();
+    if (hist) {
+        while (*hist) {
+            printf("%s\n", (**hist).line);
+            hist++;
+        }
+    }
 }
 
 /*
@@ -101,18 +130,13 @@ bool handle_internal_command(command * cmd) {
     }
     char * first_token = cmd->tokens[0];
     if (strcmp(first_token, "exit") == 0) {
-        exit(EXIT_SUCCESS);
+        command_exit();
+        return true;
     } else if (strcmp(first_token, "cd") == 0) {
-        // tokens[1] is a valid dereference because tokens is always terminated
-        // by NULL
-        char * to_dir = cmd->tokens[1];
-        if (to_dir == NULL) {
-            to_dir = getenv("HOME");
-        }
-        if (chdir(to_dir) == -1) {
-            fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
-            perror("cd");
-        }
+        command_cd(cmd);
+        return true;
+    } else if (strcmp(first_token, "history") == 0) {
+        command_history();
         return true;
     }
     return false;
@@ -486,15 +510,19 @@ void mainloop() {
     char * prompt = (char *)malloc((MAX_LOGIN_CHARS + 
                                     MAX_CWD_CHARS + 
                                     MAX_EXTRA_PROMPT_CHARS) * sizeof(char));
+    char * cmd_str;
     while(1) {
+        // Set prompt and read command into cmd_str
         set_prompt(prompt);
-        char * cmd_str = readline(prompt);
+        cmd_str = readline(prompt);
         if (cmd_str == NULL) {
             continue;
         }
         if (cmd_str[0] != '\0') {
             add_history(cmd_str);
         }
+
+        // Execute commands in cmd_str
         cmd_list = structure_cmds(cmd_str);
         free(cmd_str);
         handle_commands(cmd_list);
