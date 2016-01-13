@@ -15,13 +15,31 @@
 #define MAX_CWD_CHARS 1024
 #define MAX_EXTRA_PROMPT_CHARS 10
 
+/*
+ * Represents a shell command and contains a pointer to the next command, if 
+ * any.
+ * For example, represents `grep hi` or `grep hi < infile > outfile`, but does
+ * not represent `grep hi | grep i`, because `grep hi | grep i` contains two
+ * commands. But, the `next` member might point to a command struct that
+ * represents `grep i`.
+ */
 typedef struct command {
+    // A NULL-delimited array of tokens
+    // None of these tokens are related to io redirection
     char ** tokens;
+    // A name of a file, if input is redirected from a file. Otherwise, NULL.
     char * input;
+    // A name of a file, if output is redirected to a file. Otherwise, NULL.
     char * output;
+    // A pointer to the next command in a piped chain of commands, or NULL
+    // if this is the last command in the sequence.
     struct command * next;
 } command;
 
+/*
+ * Return a new command struct with all values set to NULL.
+ * Memory for the returned struct needs to be freed later.
+ */
 command * new_command() {
     command * cmd = (command *) malloc(sizeof(command));
     cmd->tokens = NULL;
@@ -31,6 +49,10 @@ command * new_command() {
     return cmd;
 }
 
+/*
+ * Print the contents of a linked list of command structs.
+ * Useful for debugging.
+ */
 void print_cmd_list(command * cmd_pt) {
     int i = 0;
     int j;
@@ -46,7 +68,7 @@ void print_cmd_list(command * cmd_pt) {
 }
 
 /*
- * Free memory associated with a linked list of commands.
+ * Free memory associated with a linked list of `command` structs.
  */
 void cleanup_commands(command * first_command) {
     if (!first_command) {
@@ -77,7 +99,9 @@ void cleanup_commands(command * first_command) {
  */
 void execute_command(command * cmd) {
     if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
-        fprintf(stderr, "mysh: An error occurred while executing command \"%s\"\n", cmd->tokens[0]);
+        fprintf(stderr, 
+                "mysh: An error occurred while executing command \"%s\"\n", 
+                cmd->tokens[0]);
         perror("execve");
     }
 }
@@ -100,7 +124,8 @@ void command_cd(command * cmd) {
         to_dir = getenv("HOME");
     }
     if (chdir(to_dir) == -1) {
-        fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
+        fprintf(stderr, 
+                "mysh: An error occurred while executing command \"cd\"\n");
         perror("cd");
     }
 }
@@ -145,17 +170,24 @@ bool handle_internal_command(command * cmd) {
 /*
  * Execute a linked list of external commands, and handle piping between the
  * commands.  Skip any internal commands that might exist in the linked list.
+ * |left_pipe| is a pointer to a pair of file descriptors for a pipe that
+ * appears to the left of |cmd| in the command sequence.
  */
 void handle_external_commands(command * cmd, int * left_pipe) {
     if (!cmd) {
         return;
     }
 
+    // File descriptor used for input redirection, if any
     int input_fd;
+    // File descriptor used for output redirection, if any
     int output_fd;
+    // Pair of file descriptors for a pipe to the next command, if any
     int right_pipe[2];
     pid_t cpid;
 
+    // If this is not the last command in the sequence, then we need to create
+    // a pipe to the next command.
     if (cmd->next) {
         if (pipe(right_pipe) == -1) {
             fprintf(stderr, "mysh: A fatal error occurred\n");
@@ -174,14 +206,14 @@ void handle_external_commands(command * cmd, int * left_pipe) {
         // Child process
         // Determine where to get input
         if (cmd->input) {
+            // Input is redirected from a file
             assert(!left_pipe);
             input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
             if (input_fd < 0) {
-                // TODO(agf): Note that error messages are taken from fish
-                fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
+                fprintf(stderr, 
+                    "mysh: An error occurred while redirecting file \"%s\"\n", 
+                    cmd->input);
                 perror("open");
-                // TODO(agf): The child process exiting, does not cause the
-                // parent to exit
                 exit(EXIT_FAILURE);
             }
             dup2(input_fd, STDIN_FILENO);
@@ -197,7 +229,9 @@ void handle_external_commands(command * cmd, int * left_pipe) {
             assert(!cmd->next);
             output_fd = open(cmd->output, O_CREAT | O_WRONLY | O_CLOEXEC);
             if (output_fd < 0) {
-                fprintf(stderr, "mysh: An error occurred while redirecting to file \"%s\"\n", cmd->output);
+                fprintf(stderr, 
+                    "mysh: An error occurred while redirecting to \"%s\"\n", 
+                    cmd->output);
                 perror("open");
                 exit(EXIT_FAILURE);
             }
@@ -217,7 +251,6 @@ void handle_external_commands(command * cmd, int * left_pipe) {
             close(left_pipe[0]);
             close(left_pipe[1]);
         }
-        // Parent process
         if (cmd->next) {
             handle_external_commands(cmd->next, right_pipe);
         }
@@ -357,7 +390,6 @@ command * structure_cmds(char * cmd_str) {
     command *head = NULL;
     command *tail = NULL;
 
-    // TODO(agf): Comment on this <=
     while (iter - cmd_str <= strlen(cmd_str)) {
 
         /* if double quote, skip to next double quote */
@@ -428,7 +460,8 @@ command * structure_cmds(char * cmd_str) {
                 }
                 if (tail != head) {
                     cleanup_commands(head);
-                    fprintf(stderr, "mysh: Only 1st command takes input redirect\n");
+                    fprintf(stderr, 
+                            "mysh: Only 1st command takes input redirect\n");
                     return NULL;
                 }
 
@@ -476,7 +509,8 @@ command * structure_cmds(char * cmd_str) {
                 state = 0;
                 if (tail->output != NULL) {
                     cleanup_commands(head);
-                    fprintf(stderr, "mysh: Only end command takes output redirect\n");
+                    fprintf(stderr, 
+                            "mysh: Only end command takes output redirect\n");
                     return NULL;
                 }
             }

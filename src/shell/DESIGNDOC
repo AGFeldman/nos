@@ -44,6 +44,9 @@ For readline stuff, I glanced through these pages:
 https://cnswww.cns.cwru.edu/php/chet/readline/history.html
 https://www.cs.swarthmore.edu/~newhall/unixhelp/C_cool_utils.html
 
+Some of our error messages are based on the error messages in the `fish` and
+`bash` shells.
+
 			   COMMAND SHELL
 			   =============
 
