@@ -25,6 +25,10 @@ Aaron Feldman <feldmando@gmail.com>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please include them here.
 
+Readline capabilities are implemented as extra credit. User can scroll through
+previous commands, and user can print previous commands with internal `history`
+command.
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
@@ -32,6 +36,10 @@ Aaron Feldman <feldmando@gmail.com>
 The Ubuntu man page for pipe has a really helpful example.
 
 I found the `strace` utility to be useful, as well as `ps aux | grep ...`.
+
+For readline stuff, I glanced through these pages: 
+https://cnswww.cns.cwru.edu/php/chet/readline/history.html
+https://www.cs.swarthmore.edu/~newhall/unixhelp/C_cool_utils.html
 
 			   COMMAND SHELL
 			   =============
