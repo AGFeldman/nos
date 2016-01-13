@@ -90,6 +90,9 @@ bool is_internal_command(command * cmd) {
  * true. Otherwise, return false.
  */
 bool handle_internal_command(command * cmd) {
+    if (!cmd) {
+        return false;
+    }
     char * first_token = cmd->tokens[0];
     if (strcmp(first_token, "exit") == 0) {
         exit(EXIT_SUCCESS);
@@ -314,6 +317,7 @@ command * structure_cmds(char * cmd_str) {
             /* if no closing quote appears, exit */
             while (*iter != '"') {
                 if (*iter == '\0') {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Mismatched quotes\n");
                     return NULL;
                 }
@@ -345,6 +349,7 @@ command * structure_cmds(char * cmd_str) {
             if (state == 0) {
 
                 if (token_counter == 0) {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Can't pipe to empty command\n");
                     return NULL;
                 }
@@ -368,10 +373,12 @@ command * structure_cmds(char * cmd_str) {
             /* redirect input */
             else if (state == 1) {
                 if (token_counter != 1) {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Input must be one token\n");
                     return NULL;
                 }
                 if (tail != head) {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Only 1st command takes input redirect\n");
                     return NULL;
                 }
@@ -394,6 +401,7 @@ command * structure_cmds(char * cmd_str) {
             /* redirect output */
             else {
                 if (token_counter != 1) {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Output must be one token\n");
                     return NULL;
                 }
@@ -418,6 +426,7 @@ command * structure_cmds(char * cmd_str) {
             if (*iter == '|') {
                 state = 0;
                 if (tail->output != NULL) {
+                    cleanup_commands(head);
                     fprintf(stderr, "mysh: Only end command takes output redirect\n");
                     return NULL;
                 }
