@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <assert.h>
@@ -320,7 +321,17 @@ command * structure_cmds(char * cmd_str) {
                     fprintf(stderr, "Only 1st command takes input redirect\n");
                     return 0;
                 }
-                int len = iter - begin;
+
+                /* strip leading whitespace */
+                while (isspace(*begin))
+                    begin++;
+                /* strip trailing whitespace */
+                char * marker = iter - 1;
+                while (isspace(*marker))
+                    marker--;
+
+                /* copy string */
+                int len = marker - begin + 1;
                 tail->input = (char *) malloc(len + 1);
                 memcpy(tail->input, begin, len);
                 tail->input[len] = '\0';
@@ -332,7 +343,17 @@ command * structure_cmds(char * cmd_str) {
                     fprintf(stderr, "Output must be one token\n");
                     return 0;
                 }
-                int len = iter - begin;
+
+                /* strip leading whitespace */
+                while (isspace(*begin))
+                    begin++;
+                /* strip trailing whitespace */
+                char * marker = iter - 1;
+                while (isspace(*marker))
+                    marker--;
+
+                /* copy string */
+                int len = marker - begin + 1;
                 tail->output = (char *) malloc(len + 1);
                 memcpy(tail->output, begin, len);
                 tail->output[len] = '\0';
@@ -457,8 +478,11 @@ void mainloop() {
         fgets(cmd_str, max_len, stdin);
 
         cmd_list = structure_cmds(cmd_str);
+/*
         handle_commands(cmd_list, NULL);
         cleanup_commands(cmd_list);
+*/
+        print_cmd_list(cmd_list);
     }
 }
 
