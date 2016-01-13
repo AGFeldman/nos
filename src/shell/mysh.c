@@ -257,10 +257,7 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
             }
             /* otherwise, copy the preceding token into the array */
             else {
-                if (token_no >= n_tokens) {
-                    fprintf(stderr, "Too many tokens for array\n");
-                    exit(1);
-                }
+                assert(token_no < n_tokens);
 
                 int len = (iter - begin);
                 dst[token_no] = (char *) malloc(len + 1);
@@ -280,10 +277,7 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
         }
     }
 
-    if (token_no < n_tokens) {
-        fprintf(stderr, "Not enough tokens for array\n");
-        exit(1);
-    }
+    assert(token_no == n_tokens);
 }
 
 /*
@@ -313,7 +307,7 @@ command * structure_cmds(char * cmd_str) {
             /* if no closing quote appears, exit */
             while (*iter != '"') {
                 if (*iter == '\0') {
-                    fprintf(stderr, "Mismatched quotes\n");
+                    fprintf(stderr, "mysh: Mismatched quotes\n");
                     return NULL;
                 }
                 iter++;
@@ -344,8 +338,8 @@ command * structure_cmds(char * cmd_str) {
             if (state == 0) {
 
                 if (token_counter == 0) {
-                    fprintf(stderr, "Can't pipe to empty command\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Can't pipe to empty command\n");
+                    return NULL;
                 }
                 /* create new command and set to tail */
                 if (head == NULL) {
@@ -367,12 +361,12 @@ command * structure_cmds(char * cmd_str) {
             /* redirect input */
             else if (state == 1) {
                 if (token_counter != 1) {
-                    fprintf(stderr, "Input must be one token\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Input must be one token\n");
+                    return NULL;
                 }
                 if (tail != head) {
-                    fprintf(stderr, "Only 1st command takes input redirect\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Only 1st command takes input redirect\n");
+                    return NULL;
                 }
 
                 /* strip leading whitespace */
@@ -393,8 +387,8 @@ command * structure_cmds(char * cmd_str) {
             /* redirect output */
             else {
                 if (token_counter != 1) {
-                    fprintf(stderr, "Output must be one token\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Output must be one token\n");
+                    return NULL;
                 }
 
                 /* strip leading whitespace */
@@ -417,8 +411,8 @@ command * structure_cmds(char * cmd_str) {
             if (*iter == '|') {
                 state = 0;
                 if (tail->output != NULL) {
-                    fprintf(stderr, "Only end command takes output redirect\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Only end command takes output redirect\n");
+                    return NULL;
                 }
             }
             else if (*iter == '<') {
@@ -446,79 +440,6 @@ command * structure_cmds(char * cmd_str) {
     return NULL;
 }
 
-void test1() {
-    command * cmd1 = new_command();
-    cmd1->tokens = malloc(4 * sizeof(char *));
-    cmd1->tokens[0] = "grep";
-    cmd1->tokens[1] = "fork";
-    cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[3] = NULL;
-    handle_commands(cmd1);
-}
-
-void test2() {   
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    cmd1->next = cmd2;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "fork";
-    cmd2->tokens[2] = NULL;
-    handle_commands(cmd1);
-}
-
-void test3() {
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    command * cmd3 = new_command();
-    cmd1->next = cmd2;
-    cmd2->next = cmd3;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "max";
-    cmd2->tokens[2] = NULL;
-    cmd3->tokens = malloc(3 * sizeof(char *));
-    cmd3->tokens[0] = "grep";
-    cmd3->tokens[1] = "len";
-    cmd3->tokens[2] = NULL;
-    handle_commands(cmd1);
-}
-
-void test4() {
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    command * cmd3 = new_command();
-    command * cmd4 = new_command();
-    cmd1->next = cmd2;
-    cmd2->next = cmd3;
-    cmd3->next = cmd4;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "max";
-    cmd2->tokens[2] = NULL;
-    cmd3->tokens = malloc(3 * sizeof(char *));
-    cmd3->tokens[0] = "grep";
-    cmd3->tokens[1] = "len";
-    cmd3->tokens[2] = NULL;
-    cmd4->tokens = malloc(3 * sizeof(char *));
-    cmd4->tokens[0] = "grep";
-    cmd4->tokens[1] = "str";
-    cmd4->tokens[2] = NULL;
-    handle_commands(cmd1);
-}
-
 void mainloop() {
     /* maximum bytes in an input line */
     int max_len = 1024;
@@ -538,9 +459,5 @@ void mainloop() {
 
 int main(void) {
     mainloop();
-    // test1();
-    // test2();
-    // test3();
-    // test4();
     return 0;
 }
