@@ -8,6 +8,12 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+
+#define MAX_LOGIN_CHARS 80
+#define MAX_CWD_CHARS 1024
+#define MAX_EXTRA_PROMPT_CHARS 10
 
 typedef struct command {
     char ** tokens;
@@ -205,11 +211,29 @@ void handle_commands(command * cmd) {
     }
 }
 
-/* Print a prompt containing the username and current working directory. */
-void print_prompt() {
-    char cwd[1024];
-    getcwd(cwd, sizeof(cwd));
-    printf("%s:%s>", getlogin(), cwd);
+/*
+ * Set |prompt| to contain a prompt string that includes the username and
+ * current working directory.
+ * |prompt| should point to at least
+ *     MAX_LOGIN_CHARS+MAX_CWD_CHARS+MAX_EXTRA_PROMPT_CHARS
+ * of allocated memory.
+ */
+void set_prompt(char * prompt) {
+    char login[MAX_LOGIN_CHARS];
+    if (getlogin_r(login, sizeof(login)) != 0) {
+        fprintf(stderr, "mysh: Could not find login\n");
+        perror("getlogin_r");
+        login[0] = '\0';
+    }
+    char cwd[MAX_CWD_CHARS];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        fprintf(stderr, "mysh: Could not get current working directory\n");
+        perror("getcwd");
+        cwd[0] = '\0';
+    }
+    // It is important that the number of extra ":",">", etc. characters added
+    // here, be less than MAX_EXTRA_PROMPT_CHARS
+    sprintf(prompt, "%s:%s>", login, cwd);
 }
 
 /*
@@ -309,7 +333,8 @@ command * structure_cmds(char * cmd_str) {
     command *head = NULL;
     command *tail = NULL;
 
-    while (iter - cmd_str < strlen(cmd_str)) {
+    // TODO(agf): Comment on this <=
+    while (iter - cmd_str <= strlen(cmd_str)) {
 
         /* if double quote, skip to next double quote */
         if (*iter == '"') {
@@ -457,20 +482,25 @@ command * structure_cmds(char * cmd_str) {
 }
 
 void mainloop() {
-    /* maximum bytes in an input line */
-    int max_len = 1024;
-    char cmd_str[max_len];
-
     command * cmd_list;
+    char * prompt = (char *)malloc((MAX_LOGIN_CHARS + 
+                                    MAX_CWD_CHARS + 
+                                    MAX_EXTRA_PROMPT_CHARS) * sizeof(char));
     while(1) {
-        print_prompt();
-
-        fgets(cmd_str, max_len, stdin);
-
+        set_prompt(prompt);
+        char * cmd_str = readline(prompt);
+        if (cmd_str == NULL) {
+            continue;
+        }
+        if (cmd_str[0] != '\0') {
+            add_history(cmd_str);
+        }
         cmd_list = structure_cmds(cmd_str);
+        free(cmd_str);
         handle_commands(cmd_list);
         cleanup_commands(cmd_list);
     }
+    free(prompt);
 }
 
 int main(void) {
