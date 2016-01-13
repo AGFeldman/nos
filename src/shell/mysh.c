@@ -46,15 +46,12 @@ void cleanup_commands(command * first_command) {
     if (!first_command) {
         return;
     }
-    command * next_command = first_command->next;
-
-    char ** token_pointer = first_command->tokens;
-    while (*token_pointer) {
-        free(*token_pointer);
-        token_pointer++;
-    }
-
     if (first_command->tokens) {
+        char ** token_pointer = first_command->tokens;
+        while (*token_pointer) {
+            free(*token_pointer);
+            token_pointer++;
+        }
         free(first_command->tokens);
     }
     if (first_command->input) {
@@ -63,10 +60,8 @@ void cleanup_commands(command * first_command) {
     if (first_command->output) {
         free(first_command->output);
     }
-    if (first_command->next) {
-        free(first_command->next);
-    }
-
+    command * next_command = first_command->next;
+    free(first_command);
     cleanup_commands(next_command);
 }
 
