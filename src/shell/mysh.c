@@ -167,6 +167,18 @@ void print_prompt() {
     printf("%s:%s>", getlogin(), cwd);
 }
 
+char * copy_except_x(char * dst, char * src, int len, char bad) {
+    int i, j = 0;
+    for (i = 0; i < len; i++) {
+        if (src[i] != bad) {
+            dst[j] = src[i];
+            j++;
+        }
+    }
+    dst[j] = '\0';
+    return dst;
+}
+
 /*
  * Given an array of string pointers, a source string, and the number of tokens
  * to make from the string,
@@ -210,8 +222,7 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
 
                 int len = (iter - begin);
                 dst[token_no] = (char *) malloc(len + 1);
-                memcpy(dst[token_no], begin, len);
-                dst[token_no][len] = '\0';
+                copy_except_x(dst[token_no], begin, len, '"');
 
                 token_no++;
                 iter++;
@@ -333,7 +344,7 @@ command * structure_cmds(char * cmd_str) {
                 /* copy string */
                 int len = marker - begin + 1;
                 tail->input = (char *) malloc(len + 1);
-                memcpy(tail->input, begin, len);
+                copy_except_x(tail->input, begin, len, '"');
                 tail->input[len] = '\0';
             }
 
@@ -355,7 +366,7 @@ command * structure_cmds(char * cmd_str) {
                 /* copy string */
                 int len = marker - begin + 1;
                 tail->output = (char *) malloc(len + 1);
-                memcpy(tail->output, begin, len);
+                copy_except_x(tail->output, begin, len, '"');
                 tail->output[len] = '\0';
 
             }
@@ -478,11 +489,8 @@ void mainloop() {
         fgets(cmd_str, max_len, stdin);
 
         cmd_list = structure_cmds(cmd_str);
-/*
         handle_commands(cmd_list, NULL);
         cleanup_commands(cmd_list);
-*/
-        print_cmd_list(cmd_list);
     }
 }
 
