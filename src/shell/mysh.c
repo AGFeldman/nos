@@ -86,9 +86,10 @@ bool is_internal_command(command * cmd) {
 
 /*
  * If cmd->tokens represents an internal command, then execute it, handle any
- * errors, and ignore any subsequent commands linked to by cmd->next.
+ * errors, ignore any subsequent commands linked to by cmd->next, and return
+ * true. Otherwise, return false.
  */
-void handle_internal_command(command * cmd) {
+bool handle_internal_command(command * cmd) {
     char * first_token = cmd->tokens[0];
     if (strcmp(first_token, "exit") == 0) {
         exit(EXIT_SUCCESS);
@@ -103,7 +104,9 @@ void handle_internal_command(command * cmd) {
             fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
             perror("cd");
         }
+        return true;
     }
+    return false;
 }
 
 /*
@@ -113,9 +116,6 @@ void handle_internal_command(command * cmd) {
 void handle_external_commands(command * cmd, int * left_pipe) {
     if (!cmd) {
         return;
-    }
-    if (is_internal_command(cmd)) {
-        handle_external_commands(cmd->next, left_pipe);
     }
 
     int input_fd;
@@ -197,9 +197,7 @@ void handle_external_commands(command * cmd, int * left_pipe) {
  * function to execute it.
  */
 void handle_commands(command * cmd) {
-    if (is_internal_command(cmd)) {
-        handle_internal_command(cmd);
-    } else {
+    if (!handle_internal_command(cmd)) {
         handle_external_commands(cmd, NULL);
     }
 }
