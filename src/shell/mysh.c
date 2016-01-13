@@ -8,6 +8,12 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+
+#define MAX_LOGIN_CHARS 80
+#define MAX_CWD_CHARS 1024
+#define MAX_EXTRA_PROMPT_CHARS 10
 
 typedef struct command {
     char ** tokens;
@@ -77,11 +83,40 @@ void execute_command(command * cmd) {
 }
 
 /*
- * Return true if cmd->tokens represents an internal command.
+ * Handle internal `exit` command: Exit the shell.
  */
-bool is_internal_command(command * cmd) {
-    char * first_token = cmd->tokens[0];
-    return (strcmp(first_token, "cd") == 0 || strcmp(first_token, "exit") == 0);
+void command_exit() {
+    exit(EXIT_SUCCESS);
+}
+
+/*
+ * Handle internal `cd` command: Change the working directory
+ */
+void command_cd(command * cmd) {
+    // tokens[1] is a valid dereference because tokens is always terminated by
+    // NULL
+    char * to_dir = cmd->tokens[1];
+    if (to_dir == NULL) {
+        to_dir = getenv("HOME");
+    }
+    if (chdir(to_dir) == -1) {
+        fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
+        perror("cd");
+    }
+}
+
+/*
+ * Handle internal `history` command: Print history of commands entered into
+ * the shell.
+ */
+void command_history() {
+    HIST_ENTRY ** hist = history_list();
+    if (hist) {
+        while (*hist) {
+            printf("%s\n", (**hist).line);
+            hist++;
+        }
+    }
 }
 
 /*
@@ -95,18 +130,13 @@ bool handle_internal_command(command * cmd) {
     }
     char * first_token = cmd->tokens[0];
     if (strcmp(first_token, "exit") == 0) {
-        exit(EXIT_SUCCESS);
+        command_exit();
+        return true;
     } else if (strcmp(first_token, "cd") == 0) {
-        // tokens[1] is a valid dereference because tokens is always terminated
-        // by NULL
-        char * to_dir = cmd->tokens[1];
-        if (to_dir == NULL) {
-            to_dir = getenv("HOME");
-        }
-        if (chdir(to_dir) == -1) {
-            fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
-            perror("cd");
-        }
+        command_cd(cmd);
+        return true;
+    } else if (strcmp(first_token, "history") == 0) {
+        command_history();
         return true;
     }
     return false;
@@ -205,11 +235,29 @@ void handle_commands(command * cmd) {
     }
 }
 
-/* Print a prompt containing the username and current working directory. */
-void print_prompt() {
-    char cwd[1024];
-    getcwd(cwd, sizeof(cwd));
-    printf("%s:%s>", getlogin(), cwd);
+/*
+ * Set |prompt| to contain a prompt string that includes the username and
+ * current working directory.
+ * |prompt| should point to at least
+ *     MAX_LOGIN_CHARS+MAX_CWD_CHARS+MAX_EXTRA_PROMPT_CHARS
+ * of allocated memory.
+ */
+void set_prompt(char * prompt) {
+    char login[MAX_LOGIN_CHARS];
+    if (getlogin_r(login, sizeof(login)) != 0) {
+        fprintf(stderr, "mysh: Could not find login\n");
+        perror("getlogin_r");
+        login[0] = '\0';
+    }
+    char cwd[MAX_CWD_CHARS];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        fprintf(stderr, "mysh: Could not get current working directory\n");
+        perror("getcwd");
+        cwd[0] = '\0';
+    }
+    // It is important that the number of extra ":",">", etc. characters added
+    // here, be less than MAX_EXTRA_PROMPT_CHARS
+    sprintf(prompt, "%s:%s>", login, cwd);
 }
 
 /*
@@ -309,7 +357,8 @@ command * structure_cmds(char * cmd_str) {
     command *head = NULL;
     command *tail = NULL;
 
-    while (iter - cmd_str < strlen(cmd_str)) {
+    // TODO(agf): Comment on this <=
+    while (iter - cmd_str <= strlen(cmd_str)) {
 
         /* if double quote, skip to next double quote */
         if (*iter == '"') {
@@ -457,20 +506,29 @@ command * structure_cmds(char * cmd_str) {
 }
 
 void mainloop() {
-    /* maximum bytes in an input line */
-    int max_len = 1024;
-    char cmd_str[max_len];
-
     command * cmd_list;
+    char * prompt = (char *)malloc((MAX_LOGIN_CHARS + 
+                                    MAX_CWD_CHARS + 
+                                    MAX_EXTRA_PROMPT_CHARS) * sizeof(char));
+    char * cmd_str;
     while(1) {
-        print_prompt();
+        // Set prompt and read command into cmd_str
+        set_prompt(prompt);
+        cmd_str = readline(prompt);
+        if (cmd_str == NULL) {
+            continue;
+        }
+        if (cmd_str[0] != '\0') {
+            add_history(cmd_str);
+        }
 
-        fgets(cmd_str, max_len, stdin);
-
+        // Execute commands in cmd_str
         cmd_list = structure_cmds(cmd_str);
+        free(cmd_str);
         handle_commands(cmd_list);
         cleanup_commands(cmd_list);
     }
+    free(prompt);
 }
 
 int main(void) {
