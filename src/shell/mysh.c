@@ -67,6 +67,7 @@ void cleanup_commands(command * first_command) {
 
 /*
  * Attempt to execute the external command represented by cmd->tokens.
+ * Process will exit if command succeeds, but not if it fails.
  */
 void execute_command(command * cmd) {
     if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
@@ -143,9 +144,6 @@ void handle_external_commands(command * cmd, int * left_pipe) {
             assert(!left_pipe);
             input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
             if (input_fd < 0) {
-                // TODO(agf): Try not to exit if we don't need to
-                // Maybe this could be done by checking for the file's existence
-                // when it is set as cmd->input
                 // TODO(agf): Note that error messages are taken from fish
                 fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
                 perror("open");
@@ -177,8 +175,9 @@ void handle_external_commands(command * cmd, int * left_pipe) {
             // Use the write end instead of STDOUT
             dup2(right_pipe[1], STDOUT_FILENO);
         }
-
         execute_command(cmd);
+        // If we reach this point, then the command failed to execute properly
+        exit(EXIT_FAILURE);
     } else {
         // Parent process
         if (left_pipe) {
