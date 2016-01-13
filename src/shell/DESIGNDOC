@@ -17,8 +17,8 @@ Aaron Feldman <feldmando@gmail.com>
    (You only need to include the commit-hash in the file you submit
    on Moodle.)
 
-   Repository URL:  
-   commit ...
+   Repository URL: https://github.com/AGFeldman/nos
+   commit TODO(agf)
 
 ---- PRELIMINARIES ----
 
@@ -28,6 +28,10 @@ Aaron Feldman <feldmando@gmail.com>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
+
+The Ubuntu man page for pipe has a really helpful example.
+
+I found the `strace` utility to be useful, as well as `ps aux | grep ...`.
 
 			   COMMAND SHELL
 			   =============
@@ -41,8 +45,14 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
 
+Julie: 12 hours
+Aaron: 12 hours
+
 >> L2: What did each team member focus on for this assignment?  Keep
    descriptions to 25-30 words or less.
+
+Julie: Parsing
+Aaron: Fork children and execute commands
 
 ---- DATA STRUCTURES ----
 
@@ -59,6 +69,10 @@ of command. Then it creates a new command struct, which includes
 input and output redirect string pointers, a pointer to the next struct in the
 list, and an array of pointers to the tokens in the command. A second function
 populates this array. 
+
+For execution, the parent forks off a new process for each command. The parent
+creates a pipe for each pair of adjacent children, and the children set up the
+pipe with their STDIN/STDOUT. Then, the children execute the commands.
 
 >> A2: Now, given the command:
 >> "a arg1 arg2 < inp.txt | b arg1 | c arg1 arg2 arg3 > out.txt"
@@ -111,7 +125,7 @@ then executes c.
 >> reaped in the example command "a | b | c".
 
 After the parent process forks off the three child processes,
-it waitpids for each to complete, thus reaping them.
+it calls waitpid() to wait for each to complete, thus reaping them.
 
 >> A6: Similarly, describe which processes are responsible for setting
 >> up the redirections in the example command
@@ -127,7 +141,8 @@ before they attempt to execute their commands.
 
 If chdir and exit were external programs, the parent would have to fork off
 children to handle them, and the children would then be tasked with changing
-the working directory of or killing the parent, which they cannot do.
+the working directory of or killing the parent, which they cannot do (at least,
+not without some inter-process communication).
 
 >> A8: Why did you ultimately choose this design?  In what ways is it
 >> superior to other designs you considered as you developed your solution?
@@ -162,8 +177,12 @@ penalized.  We can't fix things until we know about them.  :-)
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+This assignment was a good difficulty
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+I really loved using fork() and understand it better because of this assignment.
 
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
@@ -171,6 +190,12 @@ penalized.  We can't fix things until we know about them.  :-)
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+
+We had to figure out that the write end of all copies of a pipe needs to be
+closed before EOF is sent. Meh.
+
+The example in the assignment is a pipe between parent and child, but we ended
+up using a pipe between two children. This wasn't really misleading, though.
 
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining
