@@ -29,6 +29,9 @@ Readline capabilities are implemented as extra credit. User can scroll through
 previous commands, and user can print previous commands with internal `history`
 command.
 
+We needed to install extra packages for the readline library:
+`sudo apt-get install libreadline6 libreadline6-dev`
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
