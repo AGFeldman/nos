@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 typedef struct command {
     char ** tokens;
@@ -45,15 +46,12 @@ void cleanup_commands(command * first_command) {
     if (!first_command) {
         return;
     }
-    command * next_command = first_command->next;
-
-    char ** token_pointer = first_command->tokens;
-    while (*token_pointer) {
-        free(*token_pointer);
-        token_pointer++;
-    }
-
     if (first_command->tokens) {
+        char ** token_pointer = first_command->tokens;
+        while (*token_pointer) {
+            free(*token_pointer);
+            token_pointer++;
+        }
         free(first_command->tokens);
     }
     if (first_command->input) {
@@ -62,13 +60,15 @@ void cleanup_commands(command * first_command) {
     if (first_command->output) {
         free(first_command->output);
     }
-    if (first_command->next) {
-        free(first_command->next);
-    }
-
+    command * next_command = first_command->next;
+    free(first_command);
     cleanup_commands(next_command);
 }
 
+/*
+ * Attempt to execute the external command represented by cmd->tokens.
+ * Process will exit if command succeeds, but not if it fails.
+ */
 void execute_command(command * cmd) {
     if (execvp(cmd->tokens[0], cmd->tokens) == -1) {
         fprintf(stderr, "mysh: An error occurred while executing command \"%s\"\n", cmd->tokens[0]);
@@ -77,9 +77,43 @@ void execute_command(command * cmd) {
 }
 
 /*
- * Execute a linked list of commands, and handle piping between the commands.
+ * Return true if cmd->tokens represents an internal command.
  */
-void handle_commands(command * cmd, int * left_pipe) {
+bool is_internal_command(command * cmd) {
+    char * first_token = cmd->tokens[0];
+    return (strcmp(first_token, "cd") == 0 || strcmp(first_token, "exit") == 0);
+}
+
+/*
+ * If cmd->tokens represents an internal command, then execute it, handle any
+ * errors, ignore any subsequent commands linked to by cmd->next, and return
+ * true. Otherwise, return false.
+ */
+bool handle_internal_command(command * cmd) {
+    char * first_token = cmd->tokens[0];
+    if (strcmp(first_token, "exit") == 0) {
+        exit(EXIT_SUCCESS);
+    } else if (strcmp(first_token, "cd") == 0) {
+        // tokens[1] is a valid dereference because tokens is always terminated
+        // by NULL
+        char * to_dir = cmd->tokens[1];
+        if (to_dir == NULL) {
+            to_dir = getenv("HOME");
+        }
+        if (chdir(to_dir) == -1) {
+            fprintf(stderr, "mysh: An error occurred while executing internal command \"cd\"\n");
+            perror("cd");
+        }
+        return true;
+    }
+    return false;
+}
+
+/*
+ * Execute a linked list of external commands, and handle piping between the
+ * commands.  Skip any internal commands that might exist in the linked list.
+ */
+void handle_external_commands(command * cmd, int * left_pipe) {
     if (!cmd) {
         return;
     }
@@ -110,9 +144,6 @@ void handle_commands(command * cmd, int * left_pipe) {
             assert(!left_pipe);
             input_fd = open(cmd->input, O_RDONLY | O_CLOEXEC);
             if (input_fd < 0) {
-                // TODO(agf): Try not to exit if we don't need to
-                // Maybe this could be done by checking for the file's existence
-                // when it is set as cmd->input
                 // TODO(agf): Note that error messages are taken from fish
                 fprintf(stderr, "mysh: An error occurred while redirecting file \"%s\"\n", cmd->input);
                 perror("open");
@@ -144,8 +175,9 @@ void handle_commands(command * cmd, int * left_pipe) {
             // Use the write end instead of STDOUT
             dup2(right_pipe[1], STDOUT_FILENO);
         }
-
         execute_command(cmd);
+        // If we reach this point, then the command failed to execute properly
+        exit(EXIT_FAILURE);
     } else {
         // Parent process
         if (left_pipe) {
@@ -154,9 +186,19 @@ void handle_commands(command * cmd, int * left_pipe) {
         }
         // Parent process
         if (cmd->next) {
-            handle_commands(cmd->next, right_pipe);
+            handle_external_commands(cmd->next, right_pipe);
         }
         waitpid(cpid, NULL, 0); 
+    }
+}
+
+/*
+ * Determine if |cmd| is an internal or external command, and call the proper
+ * function to execute it.
+ */
+void handle_commands(command * cmd) {
+    if (!handle_internal_command(cmd)) {
+        handle_external_commands(cmd, NULL);
     }
 }
 
@@ -215,10 +257,7 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
             }
             /* otherwise, copy the preceding token into the array */
             else {
-                if (token_no >= n_tokens) {
-                    fprintf(stderr, "Too many tokens for array\n");
-                    exit(1);
-                }
+                assert(token_no < n_tokens);
 
                 int len = (iter - begin);
                 dst[token_no] = (char *) malloc(len + 1);
@@ -238,10 +277,7 @@ void split_cmd(char ** dst, char * src, char * end, int n_tokens) {
         }
     }
 
-    if (token_no < n_tokens) {
-        fprintf(stderr, "Not enough tokens for array\n");
-        exit(1);
-    }
+    assert(token_no == n_tokens);
 }
 
 /*
@@ -271,7 +307,7 @@ command * structure_cmds(char * cmd_str) {
             /* if no closing quote appears, exit */
             while (*iter != '"') {
                 if (*iter == '\0') {
-                    fprintf(stderr, "Mismatched quotes\n");
+                    fprintf(stderr, "mysh: Mismatched quotes\n");
                     return NULL;
                 }
                 iter++;
@@ -302,8 +338,8 @@ command * structure_cmds(char * cmd_str) {
             if (state == 0) {
 
                 if (token_counter == 0) {
-                    fprintf(stderr, "Can't pipe to empty command\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Can't pipe to empty command\n");
+                    return NULL;
                 }
                 /* create new command and set to tail */
                 if (head == NULL) {
@@ -325,12 +361,12 @@ command * structure_cmds(char * cmd_str) {
             /* redirect input */
             else if (state == 1) {
                 if (token_counter != 1) {
-                    fprintf(stderr, "Input must be one token\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Input must be one token\n");
+                    return NULL;
                 }
                 if (tail != head) {
-                    fprintf(stderr, "Only 1st command takes input redirect\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Only 1st command takes input redirect\n");
+                    return NULL;
                 }
 
                 /* strip leading whitespace */
@@ -351,8 +387,8 @@ command * structure_cmds(char * cmd_str) {
             /* redirect output */
             else {
                 if (token_counter != 1) {
-                    fprintf(stderr, "Output must be one token\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Output must be one token\n");
+                    return NULL;
                 }
 
                 /* strip leading whitespace */
@@ -375,8 +411,8 @@ command * structure_cmds(char * cmd_str) {
             if (*iter == '|') {
                 state = 0;
                 if (tail->output != NULL) {
-                    fprintf(stderr, "Only end command takes output redirect\n");
-                    return 0;
+                    fprintf(stderr, "mysh: Only end command takes output redirect\n");
+                    return NULL;
                 }
             }
             else if (*iter == '<') {
@@ -404,79 +440,6 @@ command * structure_cmds(char * cmd_str) {
     return NULL;
 }
 
-void test1() {
-    command * cmd1 = new_command();
-    cmd1->tokens = malloc(4 * sizeof(char *));
-    cmd1->tokens[0] = "grep";
-    cmd1->tokens[1] = "fork";
-    cmd1->tokens[2] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[3] = NULL;
-    handle_commands(cmd1, NULL);
-}
-
-void test2() {   
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    cmd1->next = cmd2;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "fork";
-    cmd2->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
-}
-
-void test3() {
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    command * cmd3 = new_command();
-    cmd1->next = cmd2;
-    cmd2->next = cmd3;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "max";
-    cmd2->tokens[2] = NULL;
-    cmd3->tokens = malloc(3 * sizeof(char *));
-    cmd3->tokens[0] = "grep";
-    cmd3->tokens[1] = "len";
-    cmd3->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
-}
-
-void test4() {
-    command * cmd1 = new_command();
-    command * cmd2 = new_command();
-    command * cmd3 = new_command();
-    command * cmd4 = new_command();
-    cmd1->next = cmd2;
-    cmd2->next = cmd3;
-    cmd3->next = cmd4;
-    cmd1->tokens = malloc(3 * sizeof(char *));
-    cmd1->tokens[0] = "cat";
-    cmd1->tokens[1] = "/home/aaron/Dropbox/Caltech/WIN_2016/CS124/nos/src/shell/mysh.c";
-    cmd1->tokens[2] = NULL;
-    cmd2->tokens = malloc(3 * sizeof(char *));
-    cmd2->tokens[0] = "grep";
-    cmd2->tokens[1] = "max";
-    cmd2->tokens[2] = NULL;
-    cmd3->tokens = malloc(3 * sizeof(char *));
-    cmd3->tokens[0] = "grep";
-    cmd3->tokens[1] = "len";
-    cmd3->tokens[2] = NULL;
-    cmd4->tokens = malloc(3 * sizeof(char *));
-    cmd4->tokens[0] = "grep";
-    cmd4->tokens[1] = "str";
-    cmd4->tokens[2] = NULL;
-    handle_commands(cmd1, NULL);
-}
-
 void mainloop() {
     /* maximum bytes in an input line */
     int max_len = 1024;
@@ -489,16 +452,12 @@ void mainloop() {
         fgets(cmd_str, max_len, stdin);
 
         cmd_list = structure_cmds(cmd_str);
-        handle_commands(cmd_list, NULL);
+        handle_commands(cmd_list);
         cleanup_commands(cmd_list);
     }
 }
 
 int main(void) {
     mainloop();
-    // test1();
-    // test2();
-    // test3();
-    // test4();
     return 0;
 }
