@@ -21,7 +21,7 @@
 	# We choose 0x00020000 (2000:0000 or equivalent), just because.  This
 	# would give us hundreds of KB of memory to use, but we won't use
 	# even a fraction of that space.
-	# 
+	#
 	# At this point, %dl will be the drive number of the boot device
 	# (i.e. the disk that the bootloader # was loaded off of).
 	# This allows us to load additional data from the boot disk.
@@ -44,12 +44,33 @@ boot_start:
 	mov	$STR_LOADING, %si
 	call	print_str
 
-	#---------------------------------------------------------------------
-	# TODO:  Load the remainder of the program into memory using int 13h
-	#        "Extended Read Operation."  If it fails, jump to boot_fail.
-	#
-	#        REMOVE THIS COMMENT BLOCK WHEN YOU WRITE THIS CODE.
-	#---------------------------------------------------------------------
+    # Set up a Disk Address Packet (DAP) on the stack.
+    # This DAP will be used with int 13h to load the remainder of the program
+    # into memory.
+    # Start reading at sector with index 1
+    pushw $0x0000
+    pushw $0x0000
+    pushw $0x0000
+    pushw $0x0001
+    # Specify segment:offset of buffer to receive the data
+    pushw $PROGRAM_BASE_ADDR_SEGMENT  # Segment
+    pushw $PROGRAM_BASE_ADDR_OFFSET  # Offset
+    # Specify that we should load up to 126 sectors
+    pushw $0x007e
+    # The first byte of the DAP specifies that the size of the packet is 16
+    # bytes. The second byte of the packet is unused.
+    pushw $0x0010
+    # Done setting up DAP
+
+    # Invoke int 13h as an "Extended Read Operation" to load the remainder of
+    # the program into memory
+    mov $0x42, %ah
+    mov %sp, %si
+    int $0x13
+
+    # If int 13h failed, then jump to boot_fail
+    test %ah, %ah
+    jnz boot_fail
 
 	mov	$STR_LOADED, %si
 	call	print_str
@@ -73,7 +94,7 @@ boot_start:
 start_protected:
 
 	#---------------------------------------------------------------------
-	# TODO:  Switch from real mode into protected mode.  The process is
+	#        Switch from real mode into protected mode.  The process is
 	#        straightforward:
 	#
 	#        1)  Disable interrupts, since any interrupt during this
@@ -107,9 +128,20 @@ start_protected:
 	#        overview.  (We only do the parts that are relevant to our
 	#        needs in this project!)
 	#
-	#        REMOVE THIS COMMENT BLOCK WHEN YOU WRITE THIS CODE.  (FEEL
-	#        FREE TO INCORPORATE ANY OF THE ABOVE COMMENTS INTO YOUR CODE!)
+	#        TODO(agf): REMOVE THIS COMMENT BLOCK WHEN YOU WRITE THIS CODE.
+    #        (FEEL FREE TO INCORPORATE ANY OF THE ABOVE COMMENTS INTO YOUR CODE)
 	#---------------------------------------------------------------------
+
+    # Disable interrupts
+    cli
+
+    # Set the Global Descriptor Table Register
+    data32 addr32 lgdt gdtdesc
+
+    # Turn on protected mode
+    mov %cr0, %eax
+    orl CR0_PE, %eax
+    mov %eax, %cr0
 
 	# We're now in protected mode, but still in a 16-bit segment.  The
 	# CPU still has the real-mode code segment cached in %cs's segment
@@ -142,7 +174,7 @@ call_c_entry:
 	movl $0, %ebp		# Null-terminate the program's backtrace
 
 	#---------------------------------------------------------------------
-	# TODO:  Call the entry-point of the C program!  The program is
+	#        Call the entry-point of the C program!  The program is
 	#        compiled and linked into an ELF file, so the file's ELF
 	#        header will specify the entry-point into the program.  See
 	#        the e_entry field; it is a 32-bit value.
@@ -157,14 +189,17 @@ call_c_entry:
 	#        Don't forget that you are calling a C function, so follow
 	#        cdecl!
 	#
-	#        REMOVE THIS COMMENT BLOCK WHEN YOU WRITE THIS CODE.  (FEEL
-	#        FREE TO INCORPORATE ANY OF THE ABOVE COMMENTS INTO YOUR CODE!)
+	#        TODO(agf): REMOVE THIS COMMENT BLOCK WHEN YOU WRITE THIS CODE.
+	#        (FEEL FREE TO INCORPORATE ANY OF THE ABOVE COMMENTS INTO YOUR CODE)
 	#---------------------------------------------------------------------
+    mov PROGRAM_BASE_ADDR + ELF_E_ENTITY_OFFSET, %eax
+    call *%eax
 
 	#=====================================================================
 	# The rest of this file contains helper functions for the 16-bit
 	# portion of the bootloader, so switch back to 16-bit code generation.
 	.code16
+
 
 halt:
 	cli			# Disable interrupts so we can't be waken up

@@ -26,10 +26,37 @@
  *        position, or any other details you might want to keep track of!
  */
 
+// Write a string to the video display.
+// Start writing at the top of the screen + offset # of characters.
+// Based on <http://wiki.osdev.org/Printing_to_Screen>
+void write_string(int color, const char *string, int offset) {
+    volatile char * video = (volatile char *)VIDEO_BUFFER;
+    video += 2 * offset;
+    while( *string != 0 ) {
+        *video++ = *string++;
+        *video++ = color;
+    }
+}
+
+// Paint the entire display one color
+void paint_display(int color) {
+    volatile char * video = (volatile char *)VIDEO_BUFFER;
+    int i;
+    for (i = 0; i < 80 * 25; i++) {
+        *video = ' ';
+        *video++;
+        *video = color;
+        *video++;
+    }
+}
 
 void init_video(void) {
     /* TODO:  Do any video display initialization you might want to do, such
      *        as clearing the screen, initializing static variable state, etc.
      */
+    paint_display(WHITE_ON_BLUE);
+    write_string(BLUE, "Laser", 0);
+    write_string(GREEN, "Phaser", 80);
+    write_string(WHITE_ON_BLUE, "Star", 24 * 80);
 }
 

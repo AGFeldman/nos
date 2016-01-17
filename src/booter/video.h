@@ -22,6 +22,9 @@
 #define YELLOW        14
 #define WHITE         15
 
+/* Colors with non-black backgrounds */
+#define WHITE_ON_BLUE 0x1f
+
 
 void init_video(void);
 
