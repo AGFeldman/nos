@@ -55,8 +55,5 @@ void init_video(void) {
      *        as clearing the screen, initializing static variable state, etc.
      */
     paint_display(WHITE_ON_BLUE);
-    write_string(BLUE, "Laser", 0);
-    write_string(GREEN, "Phaser", 80);
-    write_string(WHITE_ON_BLUE, "Star", 24 * 80);
+    write_string(WHITE_ON_BLUE, "Hi", 24 * 80);
 }
-

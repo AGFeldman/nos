@@ -1,4 +1,7 @@
 #include "ports.h"
+#include "interrupts.h"
+#include "handlers.h"
+#include "video.h"
 
 /* This is the IO port of the PS/2 controller, where the keyboard's scan
  * codes are made available.  Scan codes can be read as follows:
@@ -36,12 +39,29 @@
  *        so that nothing gets mangled...
  */
 
+volatile static int num_presses;
+
+
+// If the "A" key was pressed, then advance a "KeyboardSaysHi" message
+// horizontally across the screen
+void handle_keyboard_interrupt(void) {
+    unsigned char scan_code = inb(KEYBOARD_PORT);
+    if (scan_code == 0x1E) {
+        // The "A" key was pressed
+        char * message =         "KeyboardSaysHi";
+        char * blank_messagage = "              ";
+        int prev_offset = (num_presses % 80) + 80 * 10;
+        write_string(GREEN, blank_messagage, prev_offset);
+        num_presses++;
+        int offset = (num_presses % 80) + 80 * 10;
+        write_string(GREEN, message, offset);
+    }
+}
 
 void init_keyboard(void) {
     /* TODO:  Initialize any state required by the keyboard handler. */
+    num_presses = 0;
 
-    /* TODO:  You might want to install your keyboard interrupt handler
-     *        here as well.
-     */
+    install_interrupt_handler(KEYBOARD_INTERRUPT, irq_keyboard_handler);
 }
 
