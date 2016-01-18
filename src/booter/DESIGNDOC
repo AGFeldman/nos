@@ -30,6 +30,22 @@ FirstName LastName <email@domain.example>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
 
+Sources that Aaron consulted for bootloader and interrupt handling. Note: I am
+not particularly recommending any of these sources as awesome references. This
+list is basically a record of my open browser tabs :)
+- CS24 Lecture 5
+- CS24 Lecture 6
+- Slide 17 of CS124 Lecture 5
+- http://pages.cs.wisc.edu/~remzi/Classes/354/Fall2012/Handouts/Handout-IA32-registers.pdf
+- https://en.wikipedia.org/wiki/INT_13H
+- https://web.stanford.edu/class/cs107/IA32_Cheat_Sheet.pdf
+- https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#File_header
+- http://wiki.osdev.org/Printing_to_Screen
+- Intel IA32 Manual, Volume 3A, Section 5.11
+- http://stackoverflow.com/questions/16255608/calling-c-functions-from-x86-assembly-language
+- http://wiki.osdev.org/PS/2_Keyboard
+
+
 			     PC BOOTER
 			     =========
 
