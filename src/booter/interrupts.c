@@ -44,7 +44,7 @@ static inline void lidt(void* base, uint16_t size) {
         uint16_t length;
         void*    base;
     } __attribute__((packed)) IDTR = { size, base };
- 
+
     // let the compiler choose an addressing mode
     asm ( "lidt %0" : : "m"(IDTR) );
 }
@@ -81,13 +81,13 @@ static inline void lidt(void* base, uint16_t size) {
 #define ICW1_INTERVAL4  0x04        /* Call address interval 4 (8) */
 #define ICW1_LEVEL      0x08        /* Level triggered (edge) mode */
 #define ICW1_INIT       0x10        /* Initialization - required! */
- 
+
 #define ICW4_8086       0x01        /* 8086/88 (MCS-80/85) mode */
 #define ICW4_AUTO       0x02        /* Auto (normal) EOI */
 #define ICW4_BUF_SLAVE  0x08        /* Buffered mode/slave */
 #define ICW4_BUF_MASTER 0x0C        /* Buffered mode/master */
 #define ICW4_SFNM       0x10        /* Special fully nested (not) */
- 
+
 /* Remap the interrupts that the PIC generates.  The default interrupt
  * mapping conflicts with the IA32 protected-mode interrupts for indicating
  * hardware/software exceptions, so we need to map them elsewhere.
@@ -99,10 +99,10 @@ static inline void lidt(void* base, uint16_t size) {
  */
 void PIC_remap(int offset1, int offset2) {
     unsigned char a1, a2;
- 
+
     a1 = inb(PIC1_DATA);                        // save masks
     a2 = inb(PIC2_DATA);
- 
+
     // starts the initialization sequence (in cascade mode)
     outb(PIC1_COMMAND, ICW1_INIT+ICW1_ICW4);
     io_wait();
@@ -131,7 +131,7 @@ void PIC_remap(int offset1, int offset2) {
 void IRQ_set_mask(unsigned char IRQline) {
     uint16_t port;
     uint8_t value;
- 
+
     if(IRQline < 8) {
         port = PIC1_DATA;
     }
@@ -140,7 +140,7 @@ void IRQ_set_mask(unsigned char IRQline) {
         IRQline -= 8;
     }
     value = inb(port) | (1 << IRQline);
-    outb(port, value);        
+    outb(port, value);
 }
 
 
@@ -168,7 +168,8 @@ void IRQ_clear_mask(unsigned char IRQline) {
 
 /* Initialize interrupts */
 void init_interrupts(void) {
-    /* TODO:  INITIALIZE AND LOAD THE INTERRUPT DESCRIPTOR TABLE.
+    // TODO(agf): Remove comment block
+    /*        INITIALIZE AND LOAD THE INTERRUPT DESCRIPTOR TABLE.
      *
      *        The entire Interrupt Descriptor Table should be zeroed out.
      *        (Unfortunately you have to do this yourself since you don't
@@ -177,6 +178,20 @@ void init_interrupts(void) {
      *        Once the entire IDT has been cleared, use the lidt() function
      *        defined above to install our IDT.
      */
+    IDT_Descriptor * i;
+    for (i = interrupt_descriptor_table;
+            i < interrupt_descriptor_table + NUM_INTERRUPTS; i++) {
+        i->offset_15_0 = 0;
+        i->selector = 0;
+        i->zero = 0;
+        i->type_attr = 0;
+        i->offset_31_16 = 0;
+    }
+    // Note: sizeof(IDT_Descriptor) happens to give us the correct size (8
+    // bytes) in this case, but this would not be the case if the struct had to
+    // add padding bytes for alignment
+    lidt((void *)interrupt_descriptor_table,
+         sizeof(IDT_Descriptor) * NUM_INTERRUPTS);
 
     /* Remap the Programmable Interrupt Controller to deliver its interrupts
      * to 0x20-0x33 (32-45), so that they don't conflict with the IA32 built-
@@ -194,7 +209,8 @@ void init_interrupts(void) {
  * not a C function, although the handler might call a C function.
  */
 void install_interrupt_handler(int num, void *handler) {
-    /* TODO:  IMPLEMENT.  See IA32 Manual, Volume 3A, Section 5.11 for an
+    // TODO(agf): Remove comment block
+    /*        IMPLEMENT.  See IA32 Manual, Volume 3A, Section 5.11 for an
      *        overview of the contents of IDT Descriptors.  These are
      *        Interrupt Gates.
      *
@@ -213,6 +229,20 @@ void install_interrupt_handler(int num, void *handler) {
      *        REMOVE THIS COMMENT WHEN YOU WRITE THE CODE.  (FEEL FREE TO
      *        INCORPORATE THE ABOVE COMMENTS IF YOU WISH.)
      */
+    IDT_Descriptor * p_descriptor = interrupt_descriptor_table + num;
+    uint16_t * p_first_half_of_handler = (uint16_t *) &handler;
+    p_descriptor->offset_15_0 = *p_first_half_of_handler;
+    p_descriptor->offset_31_16 = *(p_first_half_of_handler + 1);
+    p_descriptor->selector = SEL_CODESEG;
+    p_descriptor->zero = 0;
+    // First bit: P (present) bit is 1
+    // Next two bits: The DPL bits are 0
+    // Next bit: Always 0
+    // Next bit: D=1 to indicate that the size of the gate is 32 bits
+    // Next three bits: Always 110
+    // Note regarding portability: Compilers other than GCC might not support
+    // the `0b` prefix
+    p_descriptor->type_attr = 0b10001110;
 }
 
 

@@ -1,5 +1,8 @@
 #include "timer.h"
 #include "ports.h"
+#include "interrupts.h"
+#include "handlers.h"
+#include "video.h"
 
 /*============================================================================
  * PROGRAMMABLE INTERVAL TIMER
@@ -46,6 +49,19 @@
  *        compiler knows they can be changed by exceptional control flow.
  */
 
+volatile static int num_ticks;
+
+
+// Advance a "TimerSaysHi" message vertically across the screen
+void handle_timer_interrupt(void) {
+    char * message =       "TimerSaysHi";
+    char * blank_message = "           ";
+    int prev_offset = 40 + (num_ticks % 25) * 80;
+    write_string(GREEN, blank_message, prev_offset);
+    num_ticks++;
+    int offset = 40 + (num_ticks % 25) * 80;
+    write_string(GREEN, message, offset);
+}
 
 void init_timer(void) {
 
@@ -62,8 +78,7 @@ void init_timer(void) {
     outb(PIT_CHAN0_DATA, 0x2e);
 
     /* TODO:  Initialize other timer state here. */
+    num_ticks = 0;
 
-    /* TODO:  You might want to install your timer interrupt handler
-     *        here as well.
-     */
+    install_interrupt_handler(TIMER_INTERRUPT, irq_timer_handler);
 }
