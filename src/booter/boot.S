@@ -72,6 +72,8 @@ boot_start:
     test %ah, %ah
     jnz boot_fail
 
+    subw $0x0010, %sp
+
 	mov	$STR_LOADED, %si
 	call	print_str
 
