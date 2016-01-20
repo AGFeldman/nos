@@ -77,7 +77,7 @@ void check_collision(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
         if (shots[i].speed && shots[i].x_coord == player.x_coord &&
-            (shots[i].y_coord == player.y_coord || 
+            (shots[i].y_coord == player.y_coord ||
              shots[i].y_coord == player.y_coord + 1)) {
             win = -1;
         }
@@ -88,11 +88,12 @@ void check_win(void) {
     char * message;
     if (win == -1) {
         message = "DEATH FROM ABOVE";
+        write_string(RED, message, 10 * 80 + 40);
     }
     else if (win == 1) {
         message = "VICTORY!";
-    }
         write_string(RED, message, 10 * WIDTH + 30);
+    }
 }
 
 /* This is the entry-point for the game! */
