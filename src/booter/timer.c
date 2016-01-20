@@ -70,15 +70,9 @@ void handle_timer_interrupt(void) {
         return;
     }
 
-    write_string(RED_ON_CYAN, " ", shots[0].y_coord * 80 + shots[0].x_coord);
-    if (!(num_ticks % 5)) {
-    shots[0].y_coord = shots[0].y_coord + 1;
-    }
-    if (shots[0].y_coord >= 23) {
-        shots[0].y_coord = 0;
-    }
-    char * o = "*";
-    write_string(shots[0].color, o, shots[0].y_coord * 80 + shots[0].x_coord);
+    erase_shots();
+    update_shots(num_ticks);
+    draw_shots();
 
 
     check_collision();

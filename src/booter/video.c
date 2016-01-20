@@ -31,19 +31,19 @@
 // Start writing at the top of the screen + offset # of characters.
 // Based on <http://wiki.osdev.org/Printing_to_Screen>
 void write_string(int color, char *string, int offset) {
-    disable_interrupts();
+//    disable_interrupts();
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     video += 2 * offset;
     while( *string != 0 ) {
         *video++ = *string++;
         *video++ = color;
     }
-    enable_interrupts();
+//    enable_interrupts();
 }
 
 // Paint the entire display one color
 void paint_display(int color) {
-    disable_interrupts();
+//    disable_interrupts();
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     int i;
     for (i = 0; i < 80 * 25; i++) {
@@ -52,7 +52,7 @@ void paint_display(int color) {
         *video = color;
         *video++;
     }
-    enable_interrupts();
+//    enable_interrupts();
 }
 
 void init_video(void) {

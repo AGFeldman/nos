@@ -9,8 +9,8 @@
 void draw_world(void) {
     paint_display(WHITE_ON_CYAN);
     char * line = "                                                                                ";
-    write_string(WHITE_ON_LIGHT_GRAY, line, 80 * 23);
-    write_string(WHITE_ON_LIGHT_GRAY, line, 80 * 24);
+    write_string(WHITE_ON_LIGHT_GRAY, line, WIDTH * 23);
+    write_string(WHITE_ON_LIGHT_GRAY, line, WIDTH * 24);
 }
 
 void init_player(void) {
@@ -31,9 +31,46 @@ void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
 
 void draw_player(void) {
 //    disable_interrupts();
-    draw_ext_ascii(player.head, player.y_coord * 80 + player.x_coord, player.color);
-    draw_ext_ascii(player.body, (player.y_coord + 1) * 80 + player.x_coord, player.color);
+    draw_ext_ascii(player.head, player.y_coord * WIDTH + player.x_coord, player.color);
+    draw_ext_ascii(player.body, (player.y_coord + 1) * WIDTH + player.x_coord, player.color);
 //    enable_interrupts();
+}
+
+void init_guns(void) {
+    int i;
+    for (i = 0; i < N_GUNS; i++) {
+        shots[i].x_coord = WIDTH * (i + 1) / N_GUNS;
+        shots[i].y_coord = 0;
+        shots[i].color = RED_ON_CYAN;
+        shots[i].speed = 10 - i;
+    }
+}
+
+void erase_shots(void) {
+    int i;
+    for (i = 0; i < N_GUNS; i++) {
+        write_string(RED_ON_CYAN, " ", shots[i].y_coord * WIDTH + shots[i].x_coord);
+    }
+}
+
+void update_shots(int num_ticks) {
+    int i;
+    for (i = 0; i < N_GUNS; i++) {
+        if (!(num_ticks % shots[i].speed)) {
+            shots[i].y_coord = shots[i].y_coord + 1;
+        }
+        if (shots[i].y_coord >= 23) {
+            shots[i].y_coord = 0;
+        }
+    }
+}
+
+void draw_shots(void) {
+    int i;
+    char * o = "*";
+    for (i = 0; i < N_GUNS; i++) {
+        write_string(shots[i].color, o, shots[i].y_coord * WIDTH + shots[i].x_coord);
+    }
 }
 
 void check_collision(void) {
@@ -55,7 +92,7 @@ void check_win(void) {
     else if (win == 1) {
         message = "VICTORY!";
     }
-        write_string(RED, message, 10 * 80 + 40);
+        write_string(RED, message, 10 * WIDTH + 30);
 }
 
 /* This is the entry-point for the game! */
@@ -77,10 +114,6 @@ void c_start(void) {
 
     win = 0;
 
-    shots[0].x_coord = 30;
-    shots[0].y_coord = 0;
-    shots[0].color = RED_ON_CYAN;
-    shots[0].speed = 1;
 
     enable_interrupts();
 
