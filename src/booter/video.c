@@ -1,4 +1,5 @@
 #include "video.h"
+#include "interrupts.h"
 
 /* This is the address of the VGA text-mode video buffer.  Note that this
  * buffer actually holds 8 pages of text, but only the first page (page 0)
@@ -29,17 +30,20 @@
 // Write a string to the video display.
 // Start writing at the top of the screen + offset # of characters.
 // Based on <http://wiki.osdev.org/Printing_to_Screen>
-void write_string(int color, const char *string, int offset) {
+void write_string(int color, char *string, int offset) {
+    disable_interrupts();
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     video += 2 * offset;
     while( *string != 0 ) {
         *video++ = *string++;
         *video++ = color;
     }
+    enable_interrupts();
 }
 
 // Paint the entire display one color
 void paint_display(int color) {
+    disable_interrupts();
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     int i;
     for (i = 0; i < 80 * 25; i++) {
@@ -48,12 +52,11 @@ void paint_display(int color) {
         *video = color;
         *video++;
     }
+    enable_interrupts();
 }
 
 void init_video(void) {
     /* TODO:  Do any video display initialization you might want to do, such
      *        as clearing the screen, initializing static variable state, etc.
      */
-    paint_display(WHITE_ON_BLUE);
-    write_string(WHITE_ON_BLUE, "Hi", 24 * 80);
 }

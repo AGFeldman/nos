@@ -1,3 +1,4 @@
+#include "game.h"
 #include "timer.h"
 #include "ports.h"
 #include "interrupts.h"
@@ -54,6 +55,7 @@ volatile static int num_ticks;
 
 // Advance a "TimerSaysHi" message vertically across the screen
 void handle_timer_interrupt(void) {
+/*
     char * message =       "TimerSaysHi";
     char * blank_message = "           ";
     int prev_offset = 40 + (num_ticks % 25) * 80;
@@ -61,6 +63,25 @@ void handle_timer_interrupt(void) {
     num_ticks++;
     int offset = 40 + (num_ticks % 25) * 80;
     write_string(GREEN, message, offset);
+*/
+
+    check_win();
+    if (win || win == -1) {
+        return;
+    }
+
+    write_string(RED_ON_CYAN, " ", shots[0].y_coord * 80 + shots[0].x_coord);
+    if (!(num_ticks % 5)) {
+    shots[0].y_coord = shots[0].y_coord + 1;
+    }
+    if (shots[0].y_coord >= 23) {
+        shots[0].y_coord = 0;
+    }
+    char * o = "*";
+    write_string(shots[0].color, o, shots[0].y_coord * 80 + shots[0].x_coord);
+
+
+    check_collision();
 }
 
 void init_timer(void) {

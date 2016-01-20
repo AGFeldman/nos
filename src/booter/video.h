@@ -24,8 +24,12 @@
 
 /* Colors with non-black backgrounds */
 #define WHITE_ON_BLUE 0x1f
+#define WHITE_ON_CYAN 0x3f
+#define BLACK_ON_CYAN 0x30
+#define RED_ON_CYAN 0x34
+#define WHITE_ON_LIGHT_GRAY 0x7f
 
-void write_string(int color, const char *string, int offset);
+void write_string(int color, char *string, int offset);
 
 void paint_display(int color);
 
