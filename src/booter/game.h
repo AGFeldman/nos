@@ -26,5 +26,11 @@ volatile person player;
 
 volatile char win;
 
+void draw_player(void);
+
+void check_win(void);
+
+void check_collision(void);
+
 
 #endif /* GAME_H */
