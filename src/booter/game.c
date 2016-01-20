@@ -6,11 +6,33 @@
 
 
 
+void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
+    unsigned char to_print[2];
+    to_print[1] = '\0';
+    to_print[0] = ascii_code;
+
+    write_string(color, to_print, offset);
+}
+
+void draw_rainbow(int y) {
+    char * block = "                ";
+    write_string(BLACK_ON_RED, block, WIDTH * y);
+    write_string(BLACK_ON_YELLOW, block, WIDTH * y + 16 * 1);
+    write_string(BLACK_ON_GREEN, block, WIDTH * y + 16 * 2);
+    write_string(BLACK_ON_BLUE, block, WIDTH * y + 16 * 3);
+    write_string(BLACK_ON_MAGENTA, block, WIDTH * y + 16 * 4);
+}
+
 void draw_world(void) {
     paint_display(WHITE_ON_CYAN);
-    char * line = "                                                                                ";
-    write_string(WHITE_ON_LIGHT_GRAY, line, WIDTH * 23);
-    write_string(WHITE_ON_LIGHT_GRAY, line, WIDTH * 24);
+
+    draw_rainbow(23);
+    draw_rainbow(24);
+
+    // Goal
+    write_string(BLACK_ON_GREEN, "  ", WIDTH * (HEIGHT - 3) - 2);
+    draw_ext_ascii(222, WIDTH * (HEIGHT - 2) - 1, GREEN_ON_CYAN);
+    draw_ext_ascii(221, WIDTH * (HEIGHT - 2) - 2, GREEN_ON_CYAN);
 }
 
 void init_player(void) {
@@ -19,14 +41,6 @@ void init_player(void) {
     player.color = BLACK_ON_CYAN;
     player.x_coord = 0;
     player.y_coord = 21;
-}
-
-void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
-    unsigned char to_print[2];
-    to_print[1] = '\0';
-    to_print[0] = ascii_code;
-
-    write_string(color, to_print, offset);
 }
 
 void draw_player(void) {
@@ -39,10 +53,10 @@ void draw_player(void) {
 void init_guns(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
-        shots[i].x_coord = WIDTH * (i + 1) / N_GUNS;
+        shots[i].x_coord = (WIDTH - 2)  / N_GUNS * (i + 1);
         shots[i].y_coord = 0;
         shots[i].color = RED_ON_CYAN;
-        shots[i].speed = 10 - i;
+        shots[i].speed = N_GUNS - i;
     }
 }
 
@@ -57,7 +71,7 @@ void update_shots(int num_ticks) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
         if (!(num_ticks % shots[i].speed)) {
-            shots[i].y_coord = shots[i].y_coord + 1;
+            shots[i].y_coord ++;
         }
         if (shots[i].y_coord >= 23) {
             shots[i].y_coord = 0;
@@ -88,7 +102,7 @@ void check_win(void) {
     char * message;
     if (win == -1) {
         message = "DEATH FROM ABOVE";
-        write_string(RED, message, 10 * 80 + 40);
+        write_string(RED, message, 10 * 80 + 30);
     }
     else if (win == 1) {
         message = "VICTORY!";
@@ -112,6 +126,7 @@ void c_start(void) {
     init_keyboard();
 
     init_player();
+    init_guns();
 
     win = 0;
 
