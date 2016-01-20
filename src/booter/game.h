@@ -1,7 +1,7 @@
 #ifndef GAME_H
 #define GAME_H
 
-#define N_GUNS 10
+#define N_GUNS 15
 #define WIDTH 80
 #define HEIGHT 25
 

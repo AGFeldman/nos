@@ -55,15 +55,8 @@ volatile static int num_ticks;
 
 // Advance a "TimerSaysHi" message vertically across the screen
 void handle_timer_interrupt(void) {
-/*
-    char * message =       "TimerSaysHi";
-    char * blank_message = "           ";
-    int prev_offset = 40 + (num_ticks % 25) * 80;
-    write_string(GREEN, blank_message, prev_offset);
+
     num_ticks++;
-    int offset = 40 + (num_ticks % 25) * 80;
-    write_string(GREEN, message, offset);
-*/
 
     check_win();
     if (win || win == -1) {
@@ -73,7 +66,6 @@ void handle_timer_interrupt(void) {
     erase_shots();
     update_shots(num_ticks);
     draw_shots();
-
 
     check_collision();
 }

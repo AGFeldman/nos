@@ -26,7 +26,13 @@
 #define WHITE_ON_BLUE 0x1f
 #define WHITE_ON_CYAN 0x3f
 #define BLACK_ON_CYAN 0x30
+#define BLACK_ON_RED 0x40
+#define BLACK_ON_YELLOW 0xe0
+#define BLACK_ON_GREEN 0x20
+#define BLACK_ON_BLUE 0x10
+#define BLACK_ON_MAGENTA 0x50
 #define RED_ON_CYAN 0x34
+#define GREEN_ON_CYAN 0x32
 #define WHITE_ON_LIGHT_GRAY 0x7f
 
 void write_string(int color, char *string, int offset);
