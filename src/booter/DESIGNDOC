@@ -57,7 +57,8 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
 
-TODO(agf)
+Julie: 8 hours
+Aaron: 13 hours
 
 >> L2: What did each team member focus on for this assignment?  Keep
    descriptions to 25-30 words or less.
@@ -109,12 +110,17 @@ structs to hold information about fireballs.
 >> Similarly, when a keyboard interrupt occurs, what does your program do
 >> in response?
 
-TODO(agf)
+Interrupt handlers are fairly minimal. The timer interrupt handler increments a
+global |num_ticks| variable. The keyboard handler checks whether a scan code is
+one of two different values, and increments or decrements a global
+|displacement| variable based on the scan code.
 
 >> A5: Would you say your program relies on polling or busy-waiting anywhere
 >> to accomplish its tasks?  If so, what tasks?
 
-TODO(agf)
+The program relies heavily on polling/busy waiting. The program has a main loop
+which checks for changes to the |num_ticks| and |displacement| variables, and
+updates the game state appropriately.
 
 ---- RATIONALE ----
 
@@ -125,8 +131,9 @@ We aimed for a simple demonstration of keyboard and timer interrupt handling.
 We were interested in choosing a game that we would be excited about
 programming. But, we didn't want to over-commit, so we wanted a game that could
 be implemented incrementally and whose "minimum viable product" was simple. If
-we spent more time, we would be interested in implementing a pseudo-random
-number generator and trying to e.g. high-score data on the boot drive.
+we continued working on it, we would be interested in implementing a
+pseudo-random number generator and trying to save data to the boot drive (e.g.
+high-score data).
 
 >> A7: Did your choice of project affect any of the specific implementation
 >> details of the various subsystems that you needed to use?  (For example,
@@ -200,7 +207,6 @@ ASCII character.
 >> facilitate video output?  Briefly describe these values and their
 >> purposes here.
 
-TODO(agf)
 We use a basic API to draw on screen, but this API does not maintain any state
 other than the video buffer itself.
 
@@ -231,14 +237,17 @@ We felt that fireballs ought to be red.
 >> D1: What state does your timer subsystem manage?  Describe the variables
 >> or data structures that it maintains, and how they are used.
 
-TODO(agf)
+The timer subsystem only modifies one variable: A global |num_ticks| integer
+that tracks the number of timer interrupts that have occured.
 
 ---- ALGORITHMS ----
 
 >> D2: What abstraction does your timer code present to your main program?
 >> Briefly describe the higher-level operations you decided to implement.
 
-TODO(agf)
+We just expose the |num_ticks| variable to non-interrupt code by providing a
+get_num_ticks() function. This function disables and re-enables interrupts to
+prevent bad interactions with interrupt code that might modify |num_ticks|.
 
 >> D3: Did you change the timer frequency from 100Hz?  If so, what did you
 >> change it to, and why?
@@ -253,7 +262,9 @@ considered changing it for debugging.
 >> program's global state?  If so, what steps did you take to ensure that
 >> such situations cannot occur?
 
-TODO(agf)
+The timer interrupt handler is the only function that modifies |num_ticks|, but
+other functions need to access |num_ticks|, so we provide the get_num_ticks()
+function mentioned in D2.
 
 			KEYBOARD SUBSYSTEM
 			==================
@@ -263,25 +274,34 @@ TODO(agf)
 >> E1: What state does your keyboard subsystem manage?  Describe the variables
 >> or data structures that it maintains, and how they are used.
 
-TODO(agf)
+The only state modified by the keyboard subsystem is a global |displacement|
+integer. This represents the horizontal displacement of the player's avatar
+since the last call to get_new_displacement(). get_new_displacement() returns
+the displacement and resets it to zero, and disables and re-enables interrupts
+in order to act safely.
 
 >> E2: How do your data structures handle keys with multi-byte scan-codes?
 
-TODO(agf)
+Nothing fancy is done. The keyboard interrupt handler reads the scan code, and
+only updates |displacement| if the scan code indicates a left-arrow key press
+or a right-arrow key press. Even though these key presses generate multiple
+interrupts, we only need to look for one scan code.
 
 ---- ALGORITHMS ----
 
 >> E3: What abstraction does your keyboard code present to your main program?
 >> Briefly describe the higher-level operations you decided to implement.
 
-TODO(agf)
+It provides a get_new_displacement() function to return what the avatar's
+horizontal displacement should be since the last call to
+get_new_displacement().
 
 >> E4: Does your keyboard subsystem expose scan-codes directly to your main
 >> program, or does it preprocess them and expose other information to your
 >> main program?  If scan-code data is preprocessed, briefly describe what
 >> information is actually exposed, and how it is derived from scan-codes.
 
-TODO(agf)
+The keyboard handler reads the scan-code; see section E2.
 
 ---- SYNCHRONIZATION ----
 
@@ -290,14 +310,20 @@ TODO(agf)
 >> internal state?  If so, what steps did you take to ensure that such
 >> situations cannot occur?
 
-TODO(agf)
+The |displacement| variable is modified by the keyboard handler, it is accessed
+and modified by get_new_displacement(). We prevent race conditions by disabling
+interrupts at the beginning of get_new_displacement() and re-enabling them at
+the end. A somewhat better approach would be to only disable keyboard
+interrupts in get_new_displacement().
 
 >> E6: Given how your program handles keyboard events, is there any
 >> potential for keyboard interrupts to generate race conditions in updating
 >> your program's global state?  If so, what steps did you take to ensure
 >> that such situations cannot occur?
 
-TODO(agf)
+Nope, the only global state modified by the keyboard subsystem is the
+|displacement| variable. Other global state is modified by the main loop based
+on information returned by get_new_displacement().
 
 ---- RATIONALE ----
 
@@ -305,7 +331,12 @@ TODO(agf)
 >> keyboard subsystem uses?  How is it suited to your program's overall
 >> operation?
 
-TODO(agf)
+This system, with a single global |displacement| variable, seems reliable and
+perfectly suitable for this game's needs. However, it is not as generally
+useful as an approach that stores scan codes in a buffer for later processing.
+If we wanted to do anything else with a keyboard, we would have to either
+modify much more state from the keyboard handler, or move the scan-code
+processing outside of the keyboard handler (and would rather do the latter).
 
 			  SURVEY QUESTIONS
 			  ================
@@ -325,7 +356,8 @@ interrupt handling.
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
-Appreciate background info about interrupt table setup. Feel that we better understand how execution flow can be interrupted by interrupts.
+- Appreciated background info about interrupt table setup
+- Appreciated opportunity to think about what to watch out for regarding interrupt handling 
 
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
@@ -334,7 +366,7 @@ Appreciate background info about interrupt table setup. Feel that we better unde
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
-It would have been nice to see an example about using extended ASCII.
+It took a while to figure out how to use extended ASCII
 
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining
