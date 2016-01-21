@@ -32,6 +32,10 @@
 // Displacement of the avatar since last call to get_new_displacement()
 volatile static int displacement;
 
+/*
+ * Return the current value of |displacement| without letting it get mangled by
+ * interrupts, then reset the displacement to 0.
+ */
 int get_new_displacement(void) {
     int new_displacement;
     disable_interrupts();
@@ -41,7 +45,10 @@ int get_new_displacement(void) {
     return new_displacement;
 }
 
-
+/*
+ * Handle a keyboard interrupt by modifying the global |displacement| variable
+ * appropriately.
+ */
 void handle_keyboard_interrupt(void) {
     unsigned char scan_code = inb(KEYBOARD_PORT);
     if (scan_code == RIGHT_ARROW) {

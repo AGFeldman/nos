@@ -5,6 +5,10 @@
 #include "keyboard.h"
 
 
+/*
+ * Draw the character represented by extended ASCII code |ascii_code| in color
+ * |color| at offset |offset| from the upper-left hand of the display.
+ */
 void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
     unsigned char to_print[2];
     to_print[1] = '\0';
@@ -13,6 +17,10 @@ void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
     write_string(color, to_print, offset);
 }
 
+/*
+ * Draw a rainbow across the |y|th horizontal line of the screen. Lines are
+ * zero-indexed.
+ */
 void draw_rainbow(int y) {
     char * block = "                ";  // 16 spaces
     write_string(BLACK_ON_RED, block, WIDTH * y);
@@ -22,6 +30,10 @@ void draw_rainbow(int y) {
     write_string(BLACK_ON_MAGENTA, block, WIDTH * y + 16 * 4);
 }
 
+/*
+ * Set up the video display by painting the background, drawing the ground, and
+ * drawing the goal.
+ */
 void draw_world(void) {
     // Paint the background
     paint_display(WHITE_ON_CYAN);
@@ -36,6 +48,9 @@ void draw_world(void) {
     draw_ext_ascii(221, WIDTH * (HEIGHT - 2) - 2, GREEN_ON_CYAN);
 }
 
+/*
+ * Initialize the members of the global |player| struct.
+ */
 void init_player(void) {
     player.head = 149;
     player.body = 219;
@@ -44,6 +59,9 @@ void init_player(void) {
     player.y_coord = 21;
 }
 
+/*
+ * Draw the player's avatar on screen
+ */
 void draw_player(void) {
     draw_ext_ascii(player.head,
                    player.y_coord * WIDTH + player.x_coord,
@@ -53,11 +71,19 @@ void draw_player(void) {
                    player.color);
 }
 
+/*
+ * Erase the player's avatar that was previously drawn at position given by
+ * |prev_x|, |prev_y|
+ */
 void erase_player_at_prev_position(int prev_x, int prev_y) {
     write_string(BLACK_ON_CYAN, " ", prev_y * 80 + prev_x);
     write_string(BLACK_ON_CYAN, " ", (prev_y + 1) * 80 + prev_x);
 }
 
+/*
+ * Update the global |player| struct based on displacement from keyboard
+ * interrupts, and re-draw the player's avatar if needed.
+ */
 void update_player_position(void) {
     int displacement = get_new_displacement();
     if (displacement == 0) {
@@ -76,6 +102,9 @@ void update_player_position(void) {
     erase_player_at_prev_position(prev_x_coord, player.y_coord);
 }
 
+/*
+ * Initialize the global |shots| array of shot structs
+ */
 void init_guns(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
@@ -86,6 +115,10 @@ void init_guns(void) {
     }
 }
 
+/*
+ * Update the global |shots| struct based on elapsed time ticks (shots fall
+ * with time) and re-draw shots as needed.
+ */
 void update_shots(int num_ticks) {
     int i;
     char * o = "*";
@@ -109,6 +142,11 @@ void update_shots(int num_ticks) {
     }
 }
 
+/*
+ * Check for a collision of the player's avatar with a shot/fireball.
+ * If there is a collision, then set the global |win| variable to -1
+ * to indicate defeat.
+ */
 void check_collision(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
@@ -126,6 +164,9 @@ void write_final_message(char * message) {
     while(1);
 }
 
+/*
+ * If the gave has ended, then print an appropriate message and loop forever
+ */
 void check_win(void) {
     if (win == -1) {
         write_final_message("DEATH FROM ABOVE");
@@ -153,16 +194,16 @@ void mainloop(void) {
 
 /* This is the entry-point for the game! */
 void c_start(void) {
+    // Initialize video, interrupt, timer, and keyboard subsystems
     init_video();
     init_interrupts();
     init_timer();
     init_keyboard();
 
+    // Initialize game state
     init_player();
     init_guns();
-
     win = 0;
-
     draw_world();
     draw_player();
 

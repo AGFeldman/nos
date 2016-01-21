@@ -47,6 +47,10 @@
 volatile static int num_ticks;
 
 
+/*
+ *  Return the total number of ticks that have occurred without allowing this
+ *  value to get mangled by interrupts
+ */
 int get_num_ticks(void) {
     int sample_num_ticks;
     disable_interrupts();

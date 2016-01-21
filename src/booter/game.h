@@ -1,25 +1,30 @@
 #ifndef GAME_H
 #define GAME_H
 
+// There will be N_GUNS number of falling columns of fireballs
 #define N_GUNS 15
 #define WIDTH 80
 #define HEIGHT 25
 
+// Hold data for a falling shot / "fireball"
 typedef struct shot {
     int x_coord;
     int y_coord;
     int color;
+    // Unlike what you might expect, a smaller |speed| value means that the
+    // shot falls faster
     int speed;
 } shot;
 
 shot shots[N_GUNS];
 
+// Hold data for the player's avatar
 typedef struct person {
     int x_coord;
     int y_coord;
     int color;
-    char head;
-    char body;
+    char head;  // Extended ASCII character to represent head
+    char body;  // Extended ASCII character to represent body
 } person;
 
 person player;

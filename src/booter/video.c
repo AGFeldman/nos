@@ -21,10 +21,11 @@
  */
 #define VIDEO_BUFFER ((void *) 0xB8000)
 
-
-// Write a string to the video display.
-// Start writing at the top of the screen + offset # of characters.
-// Based on <http://wiki.osdev.org/Printing_to_Screen>
+/*
+ * Write a string to the video display.  Start writing at the top of the screen
+ * + offset # of characters.  Based on
+ * <http://wiki.osdev.org/Printing_to_Screen>
+ */
 void write_string(int color, char *string, int offset) {
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     video += 2 * offset;
@@ -34,7 +35,9 @@ void write_string(int color, char *string, int offset) {
     }
 }
 
-// Paint the entire display one color
+/*
+ * Paint the entire display one color
+ */
 void paint_display(int color) {
     volatile char * video = (volatile char *)VIDEO_BUFFER;
     int i;
