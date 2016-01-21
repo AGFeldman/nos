@@ -32,5 +32,11 @@ void check_win(void);
 
 void check_collision(void);
 
+void erase_shots(void);
+
+void update_shots(int num_ticks);
+
+void draw_shots(void);
+
 
 #endif /* GAME_H */

@@ -15,7 +15,7 @@ void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
 }
 
 void draw_rainbow(int y) {
-    char * block = "                ";
+    char * block = "                ";  // 16 spaces
     write_string(BLACK_ON_RED, block, WIDTH * y);
     write_string(BLACK_ON_YELLOW, block, WIDTH * y + 16 * 1);
     write_string(BLACK_ON_GREEN, block, WIDTH * y + 16 * 2);
@@ -29,7 +29,7 @@ void draw_world(void) {
     draw_rainbow(23);
     draw_rainbow(24);
 
-    // Goal
+    // Draw the goal
     write_string(BLACK_ON_GREEN, "  ", WIDTH * (HEIGHT - 3) - 2);
     draw_ext_ascii(222, WIDTH * (HEIGHT - 2) - 1, GREEN_ON_CYAN);
     draw_ext_ascii(221, WIDTH * (HEIGHT - 2) - 2, GREEN_ON_CYAN);
@@ -44,10 +44,12 @@ void init_player(void) {
 }
 
 void draw_player(void) {
-//    disable_interrupts();
-    draw_ext_ascii(player.head, player.y_coord * WIDTH + player.x_coord, player.color);
-    draw_ext_ascii(player.body, (player.y_coord + 1) * WIDTH + player.x_coord, player.color);
-//    enable_interrupts();
+    draw_ext_ascii(player.head,
+                   player.y_coord * WIDTH + player.x_coord,
+                   player.color);
+    draw_ext_ascii(player.body,
+                   (player.y_coord + 1) * WIDTH + player.x_coord,
+                   player.color);
 }
 
 void init_guns(void) {
@@ -63,7 +65,8 @@ void init_guns(void) {
 void erase_shots(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
-        write_string(RED_ON_CYAN, " ", shots[i].y_coord * WIDTH + shots[i].x_coord);
+        write_string(RED_ON_CYAN, " ",
+                     shots[i].y_coord * WIDTH + shots[i].x_coord);
     }
 }
 
@@ -83,7 +86,8 @@ void draw_shots(void) {
     int i;
     char * o = "*";
     for (i = 0; i < N_GUNS; i++) {
-        write_string(shots[i].color, o, shots[i].y_coord * WIDTH + shots[i].x_coord);
+        write_string(shots[i].color, o,
+                     shots[i].y_coord * WIDTH + shots[i].x_coord);
     }
 }
 
@@ -112,14 +116,6 @@ void check_win(void) {
 
 /* This is the entry-point for the game! */
 void c_start(void) {
-    // TODO(agf): Remove this block comment
-    /*        You will need to initialize various subsystems here.  This
-     *        would include the interrupt handling mechanism, and the various
-     *        systems that use interrupts.  Once this is done, you can call
-     *        enable_interrupts() to start interrupt handling, and go on to
-     *        do whatever else you decide to do!
-     */
-
     init_video();
     init_interrupts();
     init_timer();
@@ -130,14 +126,11 @@ void c_start(void) {
 
     win = 0;
 
-
     enable_interrupts();
 
     draw_world();
     draw_player();
 
-
     /* Loop forever, so that we don't fall back into the bootloader code. */
-    while (1) {
-    }
+    while (1) {}
 }

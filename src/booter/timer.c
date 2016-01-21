@@ -44,18 +44,10 @@
 #define PIT_MODE_CMD   0x43
 
 
-/* TODO:  You can create static variables here to hold timer state.
- *
- *        You should probably declare variables "volatile" so that the
- *        compiler knows they can be changed by exceptional control flow.
- */
-
 volatile static int num_ticks;
 
 
-// Advance a "TimerSaysHi" message vertically across the screen
 void handle_timer_interrupt(void) {
-
     num_ticks++;
 
     check_win();
@@ -84,8 +76,9 @@ void init_timer(void) {
     outb(PIT_CHAN0_DATA, 0x9c);
     outb(PIT_CHAN0_DATA, 0x2e);
 
-    /* TODO:  Initialize other timer state here. */
+    // Initialize other time state
     num_ticks = 0;
 
+    // Install interrupt handler
     install_interrupt_handler(TIMER_INTERRUPT, irq_timer_handler);
 }

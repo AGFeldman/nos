@@ -168,16 +168,7 @@ void IRQ_clear_mask(unsigned char IRQline) {
 
 /* Initialize interrupts */
 void init_interrupts(void) {
-    // TODO(agf): Remove comment block
-    /*        INITIALIZE AND LOAD THE INTERRUPT DESCRIPTOR TABLE.
-     *
-     *        The entire Interrupt Descriptor Table should be zeroed out.
-     *        (Unfortunately you have to do this yourself since you don't
-     *        have the C Standard Library to use...)
-     *
-     *        Once the entire IDT has been cleared, use the lidt() function
-     *        defined above to install our IDT.
-     */
+    // Zero out the Interrupt Descriptor Table
     IDT_Descriptor * i;
     for (i = interrupt_descriptor_table;
             i < interrupt_descriptor_table + NUM_INTERRUPTS; i++) {
@@ -187,6 +178,7 @@ void init_interrupts(void) {
         i->type_attr = 0;
         i->offset_31_16 = 0;
     }
+    // Load install the Interrupt Descriptor Table
     // Note: sizeof(IDT_Descriptor) happens to give us the correct size (8
     // bytes) in this case, but this would not be the case if the struct had to
     // add padding bytes for alignment
@@ -207,29 +199,12 @@ void init_interrupts(void) {
 /* Installs an interrupt handler into the Interrupt Descriptor Table.
  * The handler is expected to be an assembly language handler function,
  * not a C function, although the handler might call a C function.
+ * This only works for Interrupt Gates.
  */
 void install_interrupt_handler(int num, void *handler) {
-    // TODO(agf): Remove comment block
-    /*        IMPLEMENT.  See IA32 Manual, Volume 3A, Section 5.11 for an
-     *        overview of the contents of IDT Descriptors.  These are
-     *        Interrupt Gates.
-     *
-     *        The handler address must be split into two halves, so that it
-     *        can be stored into the IDT descriptor.
-     *
-     *        The segment selector should be the code-segment selector
-     *        that was set up in the bootloader.  (See boot.h for the
-     *        appropriate definition.)
-     *
-     *        The DPL component of the "type_attr" field specifies the
-     *        required privilege level to invoke the interrupt.  You can
-     *        set this to 0 (which allows anything to invoke the interrupt),
-     *        but its value isn't really relevant to us.
-     *
-     *        REMOVE THIS COMMENT WHEN YOU WRITE THE CODE.  (FEEL FREE TO
-     *        INCORPORATE THE ABOVE COMMENTS IF YOU WISH.)
-     */
     IDT_Descriptor * p_descriptor = interrupt_descriptor_table + num;
+    // The handler address must be split into two halves to store in the IDT
+    // descriptor
     uint16_t * p_first_half_of_handler = (uint16_t *) &handler;
     p_descriptor->offset_15_0 = *p_first_half_of_handler;
     p_descriptor->offset_31_16 = *(p_first_half_of_handler + 1);
