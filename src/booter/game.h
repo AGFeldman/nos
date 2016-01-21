@@ -12,7 +12,7 @@ typedef struct shot {
     int speed;
 } shot;
 
-volatile shot shots[N_GUNS];
+shot shots[N_GUNS];
 
 typedef struct person {
     int x_coord;
@@ -22,9 +22,10 @@ typedef struct person {
     char body;
 } person;
 
-volatile person player;
+person player;
 
-volatile char win;
+// 0 if the game is still going, 1 if victory, -1 if defeat
+char win;
 
 void draw_player(void);
 

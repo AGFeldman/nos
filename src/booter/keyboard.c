@@ -1,3 +1,4 @@
+#include "keyboard.h"
 #include "ports.h"
 #include "interrupts.h"
 #include "handlers.h"
@@ -22,45 +23,36 @@
  * fires two interrupts, so you don't have to do anything special - the
  * interrupt handler will receive each byte in a separate invocation of the
  * handler.
- *
+
  * See http://wiki.osdev.org/PS/2_Keyboard for details.
  */
 #define KEYBOARD_PORT 0x60
 
 
-volatile static int num_presses;
+// Displacement of the avatar since last call to get_new_displacement()
+volatile static int displacement;
+
+int get_new_displacement(void) {
+    int new_displacement;
+    disable_interrupts();
+    new_displacement = displacement;
+    displacement = 0;
+    enable_interrupts();
+    return new_displacement;
+}
 
 
 void handle_keyboard_interrupt(void) {
-    if (win || win == -1) {
-        return;
-    }
     unsigned char scan_code = inb(KEYBOARD_PORT);
-    if (scan_code == 0x1E) {
-        shots[0].y_coord = 0;
+    if (scan_code == RIGHT_ARROW) {
+        displacement++;
     }
-
-    if (scan_code == 0x4B) {
-        // The left arrow key was pressed
-        write_string(BLACK_ON_CYAN, " ", player.y_coord * 80 + player.x_coord);
-        write_string(BLACK_ON_CYAN, " ", (player.y_coord + 1) * 80 + player.x_coord);
-        player.x_coord--;
-        draw_player();
-    }
-
-    if (scan_code == 0x4D) {
-        // The right arrow key was pressed
-        write_string(BLACK_ON_CYAN, " ", player.y_coord * 80 + player.x_coord);
-        write_string(BLACK_ON_CYAN, " ", (player.y_coord + 1) * 80 + player.x_coord);
-        player.x_coord++;
-        draw_player();
-        if (player.x_coord >= WIDTH - 1) {
-            win = 1;
-        }
+    else if (scan_code == LEFT_ARROW) {
+        displacement--;
     }
 }
 
 void init_keyboard(void) {
-    num_presses = 0;
+    displacement = 0;
     install_interrupt_handler(KEYBOARD_INTERRUPT, irq_keyboard_handler);
 }

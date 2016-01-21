@@ -5,7 +5,6 @@
 #include "keyboard.h"
 
 
-
 void draw_ext_ascii(unsigned char ascii_code, int offset, int color) {
     unsigned char to_print[2];
     to_print[1] = '\0';
@@ -24,8 +23,10 @@ void draw_rainbow(int y) {
 }
 
 void draw_world(void) {
+    // Paint the background
     paint_display(WHITE_ON_CYAN);
 
+    // Draw the ground
     draw_rainbow(23);
     draw_rainbow(24);
 
@@ -52,6 +53,29 @@ void draw_player(void) {
                    player.color);
 }
 
+void erase_player_at_prev_position(int prev_x, int prev_y) {
+    write_string(BLACK_ON_CYAN, " ", prev_y * 80 + prev_x);
+    write_string(BLACK_ON_CYAN, " ", (prev_y + 1) * 80 + prev_x);
+}
+
+void update_player_position(void) {
+    int displacement = get_new_displacement();
+    if (displacement == 0) {
+        return;
+    }
+    int prev_x_coord = player.x_coord;
+    player.x_coord += displacement;
+    if (player.x_coord >= WIDTH - 1) {
+        player.x_coord = WIDTH - 1;
+        win = 1;
+    }
+    else if (player.x_coord < 0) {
+        player.x_coord = 0;
+    }
+    draw_player();
+    erase_player_at_prev_position(prev_x_coord, player.y_coord);
+}
+
 void init_guns(void) {
     int i;
     for (i = 0; i < N_GUNS; i++) {
@@ -62,32 +86,26 @@ void init_guns(void) {
     }
 }
 
-void erase_shots(void) {
-    int i;
-    for (i = 0; i < N_GUNS; i++) {
-        write_string(RED_ON_CYAN, " ",
-                     shots[i].y_coord * WIDTH + shots[i].x_coord);
-    }
-}
-
 void update_shots(int num_ticks) {
     int i;
+    char * o = "*";
     for (i = 0; i < N_GUNS; i++) {
         if (!(num_ticks % shots[i].speed)) {
-            shots[i].y_coord ++;
+            int last_y_coord = shots[i].y_coord;
+            shots[i].y_coord++;
+            if (shots[i].y_coord >= 23) {
+                shots[i].y_coord = 0;
+            }
+            // Draw new shot
+            write_string(shots[i].color, o,
+                         shots[i].y_coord * WIDTH + shots[i].x_coord);
+            // Erase previous shot
+            write_string(RED_ON_CYAN, " ",
+                         last_y_coord * WIDTH + shots[i].x_coord);
         }
         if (shots[i].y_coord >= 23) {
             shots[i].y_coord = 0;
         }
-    }
-}
-
-void draw_shots(void) {
-    int i;
-    char * o = "*";
-    for (i = 0; i < N_GUNS; i++) {
-        write_string(shots[i].color, o,
-                     shots[i].y_coord * WIDTH + shots[i].x_coord);
     }
 }
 
@@ -102,15 +120,34 @@ void check_collision(void) {
     }
 }
 
+/* Write a message in the center of the screen and then loop forever */
+void write_final_message(char * message) {
+    write_string(RED, message, 10 * 80 + 30);
+    while(1);
+}
+
 void check_win(void) {
-    char * message;
     if (win == -1) {
-        message = "DEATH FROM ABOVE";
-        write_string(RED, message, 10 * 80 + 30);
+        write_final_message("DEATH FROM ABOVE");
     }
     else if (win == 1) {
-        message = "VICTORY!";
-        write_string(RED, message, 10 * WIDTH + 30);
+        write_final_message("VICTORY!");
+    }
+}
+
+void mainloop(void) {
+    int last_tick = -1;
+    int current_tick;
+    // Loop forever, so that we don't fall back into the bootloader code
+    while (1) {
+        check_win();
+        current_tick = get_num_ticks();
+        if (current_tick != last_tick) {
+            update_shots(current_tick);
+            last_tick = current_tick;
+        }
+        update_player_position();
+        check_collision();
     }
 }
 
@@ -126,11 +163,10 @@ void c_start(void) {
 
     win = 0;
 
-    enable_interrupts();
-
     draw_world();
     draw_player();
 
-    /* Loop forever, so that we don't fall back into the bootloader code. */
-    while (1) {}
+    enable_interrupts();
+
+    mainloop();
 }

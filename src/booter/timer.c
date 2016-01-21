@@ -47,19 +47,17 @@
 volatile static int num_ticks;
 
 
+int get_num_ticks(void) {
+    int sample_num_ticks;
+    disable_interrupts();
+    sample_num_ticks = num_ticks;
+    enable_interrupts();
+    return sample_num_ticks;
+}
+
+
 void handle_timer_interrupt(void) {
     num_ticks++;
-
-    check_win();
-    if (win || win == -1) {
-        return;
-    }
-
-    erase_shots();
-    update_shots(num_ticks);
-    draw_shots();
-
-    check_collision();
 }
 
 void init_timer(void) {
