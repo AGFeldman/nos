@@ -301,6 +301,23 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     thread_current()->priority = new_priority;
+    unsigned char yield = 0;
+    struct list_elem *e;
+    /* If current thread no longer has the highest priority, then yield.
+     * TODO(agf): Could skip this if priority did not decrease.
+     */
+    if (!list_empty(&ready_list)) {
+        for (e = list_begin(&ready_list); e != list_end(&ready_list);
+             e = list_next(e)) {
+            if (list_entry(e, struct thread, elem)->priority > new_priority) {
+                yield = 1;
+                break;
+            }
+        }
+        if (yield) {
+            thread_yield();
+        }
+    }
 }
 
 /*! Returns the current thread's priority. */
