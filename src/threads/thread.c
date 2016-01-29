@@ -277,7 +277,7 @@ void thread_yield(void) {
     ASSERT(!intr_context());
 
     old_level = intr_disable();
-    if (cur != idle_thread) 
+    if (cur != idle_thread)
         list_push_back(&ready_list, &cur->elem);
     cur->status = THREAD_READY;
     schedule();
@@ -425,10 +425,26 @@ static void * alloc_frame(struct thread *t, size_t size) {
     thread can continue running, then it will be in the run queue.)  If the
     run queue is empty, return idle_thread. */
 static struct thread * next_thread_to_run(void) {
-    if (list_empty(&ready_list))
-      return idle_thread;
-    else
-      return list_entry(list_pop_front(&ready_list), struct thread, elem);
+    if (list_empty(&ready_list)) {
+        return idle_thread;
+    }
+    else {
+        /* Iterate through the ready queue and return a thread with the highest
+         * priority */
+        struct list_elem *e = list_begin(&ready_list);
+        struct thread *t = list_entry(e, struct thread, elem);
+        int max_priority_seen = t->priority;
+        struct list_elem *e_for_max_priority_thread_seen = e;
+        for (e = list_next(e); e != list_end(&ready_list); e = list_next(e)) {
+            t = list_entry(e, struct thread, elem);
+            if (t->priority > max_priority_seen) {
+                max_priority_seen = t->priority;
+                e_for_max_priority_thread_seen = e;
+            }
+        }
+        list_remove(e_for_max_priority_thread_seen);
+        return list_entry(e_for_max_priority_thread_seen, struct thread, elem);
+    }
 }
 
 /*! Completes a thread switch by activating the new thread's page tables, and,
@@ -447,7 +463,7 @@ static struct thread * next_thread_to_run(void) {
    After this function and its caller returns, the thread switch is complete. */
 void thread_schedule_tail(struct thread *prev) {
     struct thread *cur = running_thread();
-  
+
     ASSERT(intr_get_level() == INTR_OFF);
 
     /* Mark us as running. */
