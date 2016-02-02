@@ -311,9 +311,30 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED) {
     ASSERT(!intr_context ());
     ASSERT(lock_held_by_current_thread (lock));
 
-    if (!list_empty(&cond->waiters))
-        sema_up(&list_entry(list_pop_front(&cond->waiters),
-                            struct semaphore_elem, elem)->semaphore);
+    if (!list_empty(&cond->waiters)) {
+        // Iterate through the list of semaphores. Each semaphore has exactly
+        // one thread waiting on it. Call seam_up() on a semaphore whose waiting
+        // thread is of highest priority.
+        struct list_elem *e = list_begin(&cond->waiters);
+        struct semaphore_elem *s = list_entry(e, struct semaphore_elem, elem);
+        ASSERT(list_size(&s->semaphore.waiters) == 1);
+        int max_priority_seen = list_entry(list_begin(&s->semaphore.waiters),
+                                           struct thread, elem)->priority;
+        struct list_elem *e_for_max_priority_sema_seen = e;
+        for (e = list_next(e); e != list_end(&cond->waiters);
+             e = list_next(e)) {
+            s = list_entry(e, struct semaphore_elem, elem);
+            int priority = list_entry(list_begin(&s->semaphore.waiters),
+                                      struct thread, elem)->priority;
+            if (priority > max_priority_seen) {
+                max_priority_seen = priority;
+                e_for_max_priority_sema_seen = e;
+            }
+        }
+        list_remove(e_for_max_priority_sema_seen);
+        sema_up(&list_entry(e_for_max_priority_sema_seen,
+                struct semaphore_elem, elem)->semaphore);
+    }
 }
 
 /*! Wakes up all threads, if any, waiting on COND (protected by
