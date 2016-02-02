@@ -83,9 +83,47 @@ which parts.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+The `lock` struct added the following member: 
+`struct list_elem elem;`
+This member allows the lock to exist in a linked list. We want each thread to
+have a linked list of the locks that it holds.
+
+The `thread` struct added the following member:
+`struct list locks_held;`
+This is a linked list of the locks held by the thread. This allows the thread
+to receive priority donation from threads that are waiting on these locks.
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+Each lock has a linked list of threads that are waiting for the lock (this list
+was already in the codebase as `lock.semaphore.waiters`). Additionally, each
+thread has a linked list of locks that it holds.
+
+Suppose that a high-priority thread H is waiting on a lock LM that a
+medium-priority thread M holds, and M is waiting on a lock LL that a
+low-priority thread L holds:
+
+--Thread L--
+    Priority=0
+    ||Lock LL|| (held in Thread L's `locks_held` list)
+        --Thread M-- (pointed to by Lock LL's `holder` field)
+            Priority=1
+            ||Lock LM|| (held in Thread M's `locks_held` list)
+                --Thread H--
+                    Priority=2
+
+When we call thread_get_other_priority() to get L's priority, we see that L's
+priority is 0, but it also holds Lock LL. So, we call lock_get_priority() to
+get the maximum priority of all threads waiting on LL. (If L also held another
+lock LL2, then we would also call lock_get_priority() for LL2). LL is only
+waited on by one thread, M. We see that M's priority is 1, but it also holds
+lock LM. So, we call lock_get_priority(LM). LM is only waited on by one thread,
+H, who's priority is 2. So, H donates it's priority to M, and M's effective
+priority becomes 2. Then, M's effective priority is 2, so it donates to L, and
+L's effective priority becomes 2.
+
 
 ---- ALGORITHMS ----
 
@@ -109,8 +147,29 @@ priority.
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+To enable priority donation, the only extra task that lock_acquire does() is to
+push the lock onto the acquiring thread's list of locks held. The lock is
+removed from this list with a call to lock_release(). 
+
+I would say that this makes donation possible, but doesn't actually perform the
+donation. The donation is performed when thread_get_other_priority(T) is called
+to get the priority of thread T. When this call happens, T examines all of the
+locks that it holds, and thread_get_other_priority() is again called for each
+of the threads that are waiting on each of the locks that T holds. With this
+setup, nested donation is handled naturally by recursion. However, it is
+possible for thread_get_other_priority() to cause an infinite loop when there
+is a deadlock.
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+
+When lock_release() is called, the lock is removed the `locks_held` list of the
+thread that had held the lock. Then, sema_up() is called, since the lock
+structure is implemented on top of a semaphore. sema_up() unblocks the
+highest-priority thread that was waiting for the lock, then yields the current
+thread if its priority is lower than that of the unblocked thread. This makes
+it possible for the higher-priority thread to begin executing immediately once
+the lock is released.
 
 ---- SYNCHRONIZATION ----
 
@@ -118,10 +177,19 @@ priority.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+TODO(agf)
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+This was the only design that I considered seriously. State gets changed by
+lock_acquire() and lock_release(), and priority is determined when
+thread_get_other_priority() is called. I briefly considered storing donated
+priority(s) in a field of struct `thread`, but decided against it because it
+seemed bug-prone to try to keep this field up to date.
+
 
 			  ADVANCED SCHEDULER
 			  ==================

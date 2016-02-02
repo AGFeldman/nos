@@ -24,7 +24,8 @@ void sema_self_test(void);
 
 /*! Lock. */
 struct lock {
-    struct thread *holder;      /*!< Thread holding lock (for debugging). */
+    /*! Thread holding lock. Useful for priority donation and debugging. */
+    struct thread *holder;
     struct semaphore semaphore; /*!< Binary semaphore controlling access. */
     /*! List element for a thread's list of locks held */
     struct list_elem elem;
