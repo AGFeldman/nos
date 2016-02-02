@@ -188,7 +188,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     thread_unblock(t);
 
     /* Yield if the new thread has higher priority */
-    if (thread_current()->priority < priority) {
+    if (thread_get_priority() < priority) {
         thread_yield();
     }
 
@@ -306,6 +306,7 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     thread_current()->priority = new_priority;
+    int new_effective_priority = thread_get_priority();
     unsigned char yield = 0;
     struct list_elem *e;
     /* If current thread no longer has the highest priority, then yield.
@@ -314,7 +315,8 @@ void thread_set_priority(int new_priority) {
     if (!list_empty(&ready_list)) {
         for (e = list_begin(&ready_list); e != list_end(&ready_list);
              e = list_next(e)) {
-            if (list_entry(e, struct thread, elem)->priority > new_priority) {
+            if (thread_get_other_priority(list_entry(e, struct thread, elem)) >
+                    new_effective_priority) {
                 yield = 1;
                 break;
             }
@@ -325,9 +327,28 @@ void thread_set_priority(int new_priority) {
     }
 }
 
-/*! Returns the current thread's priority. */
+/*! Returns the priority of thread t. In the presence of priority donation,
+    returns the higher (donated) priority. */
+int thread_get_other_priority(struct thread *t) {
+    int max_priority = t->priority;
+    struct list * locks_held = &t->locks_held;
+    if (!list_empty(locks_held)) {
+        struct list_elem *e;
+        for (e = list_begin(locks_held); e != list_end(locks_held);
+             e = list_next(e)) {
+            int priority = lock_get_priority(list_entry(e, struct lock, elem));
+            if (priority > max_priority) {
+                max_priority = priority;
+            }
+        }
+    }
+    return max_priority;
+}
+
+/*! Returns the current thread's priority.  In the presence of priority
+    donation, returns the higher (donated) priority. */
 int thread_get_priority(void) {
-    return thread_current()->priority;
+    return thread_get_other_priority(thread_current());
 }
 
 /*! Sets the current thread's nice value to NICE. */
@@ -426,6 +447,8 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->priority = priority;
     t->magic = THREAD_MAGIC;
 
+    list_init(&t->locks_held);
+
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
     intr_set_level(old_level);
@@ -455,12 +478,13 @@ static struct thread * next_thread_to_run(void) {
          * priority */
         struct list_elem *e = list_begin(&ready_list);
         struct thread *t = list_entry(e, struct thread, elem);
-        int max_priority_seen = t->priority;
+        int max_priority_seen = thread_get_other_priority(t);
         struct list_elem *e_for_max_priority_thread_seen = e;
         for (e = list_next(e); e != list_end(&ready_list); e = list_next(e)) {
             t = list_entry(e, struct thread, elem);
-            if (t->priority > max_priority_seen) {
-                max_priority_seen = t->priority;
+            int priority = thread_get_other_priority(t);
+            if (priority > max_priority_seen) {
+                max_priority_seen = priority;
                 e_for_max_priority_thread_seen = e;
             }
         }
