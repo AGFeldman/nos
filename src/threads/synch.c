@@ -105,13 +105,14 @@ bool sema_try_down(struct semaphore *sema) {
     This function may be called from an interrupt handler. */
 void sema_up(struct semaphore *sema) {
     enum intr_level old_level;
-    struct thread * unblocked_thread = NULL;
-    int max_priority_seen;
+    int max_priority_seen = -1;
 
     ASSERT(sema != NULL);
 
     old_level = intr_disable();
     if (!list_empty(&sema->waiters)) {
+        // Iterate through the list of threads waiting on the semaphore and
+        // unblock one that has the highest priority
         struct list_elem *e = list_begin(&sema->waiters);
         struct thread *t = list_entry(e, struct thread, elem);
         max_priority_seen = t->priority;
@@ -125,13 +126,13 @@ void sema_up(struct semaphore *sema) {
             }
         }
         list_remove(e_for_max_priority_thread_seen);
-        unblocked_thread = list_entry(e_for_max_priority_thread_seen,
-                                      struct thread, elem);
-        thread_unblock(unblocked_thread);
+        thread_unblock(list_entry(e_for_max_priority_thread_seen,
+                                  struct thread, elem));
     }
     sema->value++;
     intr_set_level(old_level);
-    if (!intr_context() && unblocked_thread && thread_get_priority() < max_priority_seen) {
+    // TODO(agf): Do we need the !intr_context() check?
+    if (!intr_context() && thread_get_priority() < max_priority_seen) {
         thread_yield();
     }
 }
