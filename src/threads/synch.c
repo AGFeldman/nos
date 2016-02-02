@@ -89,7 +89,7 @@ bool sema_try_down(struct semaphore *sema) {
     old_level = intr_disable();
     if (sema->value > 0) {
         sema->value--;
-        success = true; 
+        success = true;
     }
     else {
       success = false;
@@ -105,16 +105,35 @@ bool sema_try_down(struct semaphore *sema) {
     This function may be called from an interrupt handler. */
 void sema_up(struct semaphore *sema) {
     enum intr_level old_level;
+    struct thread * unblocked_thread = NULL;
+    int max_priority_seen;
 
     ASSERT(sema != NULL);
 
     old_level = intr_disable();
     if (!list_empty(&sema->waiters)) {
-        thread_unblock(list_entry(list_pop_front(&sema->waiters),
-                                  struct thread, elem));
+        struct list_elem *e = list_begin(&sema->waiters);
+        struct thread *t = list_entry(e, struct thread, elem);
+        max_priority_seen = t->priority;
+        struct list_elem *e_for_max_priority_thread_seen = e;
+        for (e = list_next(e); e != list_end(&sema->waiters);
+             e = list_next(e)) {
+            t = list_entry(e, struct thread, elem);
+            if (t->priority > max_priority_seen) {
+                max_priority_seen = t->priority;
+                e_for_max_priority_thread_seen = e;
+            }
+        }
+        list_remove(e_for_max_priority_thread_seen);
+        unblocked_thread = list_entry(e_for_max_priority_thread_seen,
+                                      struct thread, elem);
+        thread_unblock(unblocked_thread);
     }
     sema->value++;
     intr_set_level(old_level);
+    if (!intr_context() && unblocked_thread && thread_get_priority() < max_priority_seen) {
+        thread_yield();
+    }
 }
 
 static void sema_test_helper(void *sema_);
@@ -270,7 +289,7 @@ void cond_wait(struct condition *cond, struct lock *lock) {
     ASSERT(lock != NULL);
     ASSERT(!intr_context());
     ASSERT(lock_held_by_current_thread(lock));
-  
+
     sema_init(&waiter.semaphore, 0);
     list_push_back(&cond->waiters, &waiter.elem);
     lock_release(lock);
@@ -291,7 +310,7 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED) {
     ASSERT(!intr_context ());
     ASSERT(lock_held_by_current_thread (lock));
 
-    if (!list_empty(&cond->waiters)) 
+    if (!list_empty(&cond->waiters))
         sema_up(&list_entry(list_pop_front(&cond->waiters),
                             struct semaphore_elem, elem)->semaphore);
 }
