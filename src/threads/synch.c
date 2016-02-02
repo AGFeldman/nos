@@ -136,6 +136,7 @@ void sema_up(struct semaphore *sema) {
     if (!intr_context() && thread_get_priority() < max_priority_seen) {
         thread_yield();
     }
+    // TODO(agf): Else, intr_yield_on_return or set yield_on_return=true ?
 }
 
 static void sema_test_helper(void *sema_);

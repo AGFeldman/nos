@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -363,9 +364,16 @@ int thread_get_nice(void) {
 }
 
 /*! Returns 100 times the system load average. */
+// TODO(agf): Right now, this is just a test of fixed-point real arithmetic
 int thread_get_load_avg(void) {
-    /* Not yet implemented. */
-    return 0;
+    FPNUM coeff1 = fixed_point_frac(59, 60);
+    FPNUM coeff2 = fixed_point_frac(1, 60);
+    FPNUM prev_load_avg = fixed_point_frac(9, 8);
+    int ready_threads = 3;
+    return 100 * fixed_point_fptoi(
+            fixed_point_add(
+                fixed_point_mul(coeff1, prev_load_avg),
+                fixed_point_fp_times_i(coeff2, ready_threads)));
 }
 
 /*! Returns 100 times the current thread's recent_cpu value. */
