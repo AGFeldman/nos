@@ -8,9 +8,8 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Julie Kew <julie.kew@gmail.com>
+Aaron Feldman <feldmando@gmail.com>
 
 >> Specify how many late tokens you are using on this assignment:  
 
@@ -18,8 +17,8 @@ FirstName LastName <email@domain.example>
    (You only need to include the commit-hash in the file you submit
    on Moodle.)
 
-   Repository URL:  
-   commit ...
+   Repository URL: https://github.com/AGFeldman/nos 
+   commit TODO(agf)
 
 ---- PRELIMINARIES ----
 
