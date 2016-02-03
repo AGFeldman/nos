@@ -66,7 +66,8 @@ static void kernel_thread(thread_func *, void *aux);
 static void idle(void *aux UNUSED);
 static struct thread *running_thread(void);
 static struct thread *next_thread_to_run(void);
-static void init_thread(struct thread *, const char *name, int priority);
+static void init_thread(struct thread *, const char *name, int priority,
+                        int nice);
 static bool is_thread(struct thread *) UNUSED;
 static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
@@ -93,7 +94,7 @@ void thread_init(void) {
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
-    init_thread(initial_thread, "main", PRI_DEFAULT);
+    init_thread(initial_thread, "main", PRI_DEFAULT, 0);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
 }
@@ -169,7 +170,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         return TID_ERROR;
 
     /* Initialize thread. */
-    init_thread(t, name, priority);
+    init_thread(t, name, priority, thread_get_nice());
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -355,14 +356,15 @@ int thread_get_priority(void) {
 }
 
 /*! Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED) {
-    /* Not yet implemented. */
+void thread_set_nice(int nice) {
+    thread_current()->nice = nice;
+    // TODO(agf): Recalculate the thread's priority based on the new value.
+    // If the thread no longer has the highest priority, yield.
 }
 
 /*! Returns the current thread's nice value. */
 int thread_get_nice(void) {
-    /* Not yet implemented. */
-    return 0;
+    return thread_current()->nice;
 }
 
 /*! Update the system_load_avg global variable according to an exponentially
@@ -455,7 +457,8 @@ static bool is_thread(struct thread *t) {
 }
 
 /*! Does basic initialization of T as a blocked thread named NAME. */
-static void init_thread(struct thread *t, const char *name, int priority) {
+static void init_thread(struct thread *t, const char *name, int priority,
+                        int nice) {
     enum intr_level old_level;
 
     ASSERT(t != NULL);
@@ -467,6 +470,7 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
     t->priority = priority;
+    t->nice = nice;
     t->magic = THREAD_MAGIC;
 
     list_init(&t->locks_held);
