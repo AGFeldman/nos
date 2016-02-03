@@ -254,6 +254,16 @@ seemed bug-prone to try to keep this field up to date.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+`typedef int FPNUM`: To store fixed-point real numbers
+`FIXED_POINT_F`: Macro defined to by 16384, which is 2^14
+Global int/FPNUM `system_load_avg`: Store the most recently computed system
+                                    load average.
+`int nice`: A member of the `thread` struct, used to store the thread's nice
+            value
+`int recent_cpu`: A member of the `thread` struct, used to store the thread's
+                  recent cpu value.
+
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
@@ -261,11 +271,13 @@ seemed bug-prone to try to keep this field up to date.
 >> scheduling decision and the priority and recent_cpu values for each
 >> thread after each given number of timer ticks:
 
+                 >> Niceness:
+                 >> 0   1   2
 timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
+ 0      0   0   0  63  61  59   A 
+ 4      
  8
 12
 16
