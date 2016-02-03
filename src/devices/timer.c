@@ -139,6 +139,7 @@ void timer_print_stats(void) {
 /*! Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
+    thread_tick();
     if (thread_mlfqs) {
         if (ticks % TIMER_FREQ == 0) {
             thread_update_load_avg();
@@ -148,7 +149,6 @@ static void timer_interrupt(struct intr_frame *args UNUSED) {
             thread_update_priorities();
         }
     }
-    thread_tick();
 }
 
 /*! Returns true if LOOPS iterations waits for more than one timer tick,
