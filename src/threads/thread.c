@@ -278,16 +278,13 @@ void thread_sleep(int64_t sleep_ticks) {
 
 /*! Wakes the given thread. */
 void thread_wake(struct thread * sleeper) {
-    enum intr_level old_level;
-
     ASSERT(is_thread(sleeper));
+    ASSERT(intr_context());
 
-    old_level = intr_disable();
     ASSERT(sleeper->status == THREAD_SLEEPING);
     list_remove(&(sleeper->elem));
     list_push_back(&ready_list, &(sleeper->elem));
     sleeper->status = THREAD_READY;
-    intr_set_level(old_level);
 }
 
 /*! Returns the name of the running thread. */
