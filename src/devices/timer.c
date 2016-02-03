@@ -139,9 +139,14 @@ void timer_print_stats(void) {
 /*! Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
-    if (ticks % TIMER_FREQ == 0) {
-        thread_update_load_avg();
-        thread_update_recent_cpus();
+    if (thread_mlfqs) {
+        if (ticks % TIMER_FREQ == 0) {
+            thread_update_recent_cpus();
+            thread_update_load_avg();
+        }
+        if (ticks % 4 == 0) {
+            thread_update_priorities();
+        }
     }
     thread_tick();
 }
