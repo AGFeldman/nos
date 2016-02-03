@@ -370,14 +370,16 @@ int thread_get_nice(void) {
 void thread_update_load_avg(void) {
     FPNUM coeff1 = fixed_point_frac(59, 60);
     FPNUM coeff2 = fixed_point_frac(1, 60);
-    // TODO(agf): Check that this is correct.
-    // It should be the number of threads that are either running or ready to
-    // run at time of update.
-    // This is definitely incorrect if it is possible to run multiple threads
-    // at once (e.g. on a mulitcore system).
-    // It also would be incorrect if the idle thread is never added to ready
-    // list.
+
+    // The number running threads plus the number of ready threads, not
+    // counting the idle thread.
+    // Note that this calculation would be incorrect if it were possible to
+    // have multiple threads running at once, e.g. on multi-core systems.
     int num_ready_threads = list_size(&ready_list);
+    if (thread_current() != idle_thread) {
+        num_ready_threads++;
+    }
+
     system_load_avg = fixed_point_add(
             fixed_point_mul(coeff1, system_load_avg),
             fixed_point_fp_times_i(coeff2, num_ready_threads));
