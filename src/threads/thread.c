@@ -67,7 +67,7 @@ static void idle(void *aux UNUSED);
 static struct thread *running_thread(void);
 static struct thread *next_thread_to_run(void);
 static void init_thread(struct thread *, const char *name, int priority,
-                        int nice);
+                        int nice, FPNUM recent_cpu);
 static bool is_thread(struct thread *) UNUSED;
 static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
@@ -94,7 +94,7 @@ void thread_init(void) {
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
-    init_thread(initial_thread, "main", PRI_DEFAULT, 0);
+    init_thread(initial_thread, "main", PRI_DEFAULT, 0, 0);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
 }
@@ -120,14 +120,18 @@ void thread_tick(void) {
     struct thread *t = thread_current();
 
     /* Update statistics. */
-    if (t == idle_thread)
+    if (t == idle_thread) {
         idle_ticks++;
+    }
 #ifdef USERPROG
-    else if (t->pagedir != NULL)
+    else if (t->pagedir != NULL) {
         user_ticks++;
+    }
 #endif
-    else
+    else {
         kernel_ticks++;
+        t->recent_cpu = fixed_point_fp_plus_i(t->recent_cpu, 1);
+    }
 
     /* Enforce preemption. */
     if (++thread_ticks >= TIME_SLICE)
@@ -170,7 +174,8 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         return TID_ERROR;
 
     /* Initialize thread. */
-    init_thread(t, name, priority, thread_get_nice());
+    init_thread(t, name, priority, thread_get_nice(),
+                thread_current()->recent_cpu);
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -387,17 +392,22 @@ void thread_update_load_avg(void) {
             fixed_point_fp_times_i(coeff2, num_ready_threads));
 }
 
+void thread_update_recent_cpus(void) {
+    // TODO(agf)
+}
+
 /*! Returns 100 times the system load average, rounded to the nearest int. */
 int thread_get_load_avg(void) {
     return fixed_point_fptoi(fixed_point_fp_times_i(system_load_avg, 100));
 }
 
-/*! Returns 100 times the current thread's recent_cpu value. */
+/*! Returns 100 times the current thread's recent_cpu value, rounded to the
+    nearest integer. */
 int thread_get_recent_cpu(void) {
-    /* Not yet implemented. */
-    return 0;
+    return fixed_point_fptoi(fixed_point_fp_times_i(
+                thread_current()->recent_cpu, 100));
 }
-
+
 /*! Idle thread.  Executes when no other thread is ready to run.
 
     The idle thread is initially put on the ready list by thread_start().
@@ -458,7 +468,7 @@ static bool is_thread(struct thread *t) {
 
 /*! Does basic initialization of T as a blocked thread named NAME. */
 static void init_thread(struct thread *t, const char *name, int priority,
-                        int nice) {
+                        int nice, FPNUM recent_cpu) {
     enum intr_level old_level;
 
     ASSERT(t != NULL);
@@ -471,6 +481,7 @@ static void init_thread(struct thread *t, const char *name, int priority,
     t->stack = (uint8_t *) t + PGSIZE;
     t->priority = priority;
     t->nice = nice;
+    t->recent_cpu = recent_cpu;
     t->magic = THREAD_MAGIC;
 
     list_init(&t->locks_held);

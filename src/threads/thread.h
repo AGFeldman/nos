@@ -97,6 +97,10 @@ struct thread {
     uint8_t *stack;                     /*!< Saved stack pointer. */
     int priority;                       /*!< Priority. */
     int nice;                           /*!< Niceness value. */
+    /*! A measure of how much recent time this thread has spent on the CPU,
+        expressed as a fixed-point real number.
+        TODO(agf): It is messy to use `int` here instead of FPNUM. */
+    int recent_cpu;
     struct list_elem allelem;           /*!< List element for all threads list. */
     /**@}*/
 
@@ -162,6 +166,7 @@ int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 void thread_update_load_avg(void);
+void thread_update_recent_cpus(void);
 int thread_get_load_avg(void);
 
 #endif /* threads/thread.h */
