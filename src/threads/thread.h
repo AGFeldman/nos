@@ -124,6 +124,11 @@ struct thread {
     Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+/*! System-wide load average.
+    Should be updated once per second. */
+// TODO(agf): It is very messy to use `int` here instead of FPNUM
+extern int system_load_avg;
+
 void thread_init(void);
 void thread_start(void);
 
@@ -155,6 +160,7 @@ void thread_set_priority(int);
 int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
+void thread_update_load_avg(void);
 int thread_get_load_avg(void);
 
 #endif /* threads/thread.h */

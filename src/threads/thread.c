@@ -59,6 +59,8 @@ static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
     Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+FPNUM system_load_avg = 0;
+
 static void kernel_thread(thread_func *, void *aux);
 
 static void idle(void *aux UNUSED);
@@ -363,17 +365,27 @@ int thread_get_nice(void) {
     return 0;
 }
 
-/*! Returns 100 times the system load average. */
-// TODO(agf): Right now, this is just a test of fixed-point real arithmetic
-int thread_get_load_avg(void) {
+/*! Update the system_load_avg global variable according to an exponentially
+    weighted moving average. */
+void thread_update_load_avg(void) {
     FPNUM coeff1 = fixed_point_frac(59, 60);
     FPNUM coeff2 = fixed_point_frac(1, 60);
-    FPNUM prev_load_avg = fixed_point_frac(9, 8);
-    int ready_threads = 3;
-    return 100 * fixed_point_fptoi(
-            fixed_point_add(
-                fixed_point_mul(coeff1, prev_load_avg),
-                fixed_point_fp_times_i(coeff2, ready_threads)));
+    // TODO(agf): Check that this is correct.
+    // It should be the number of threads that are either running or ready to
+    // run at time of update.
+    // This is definitely incorrect if it is possible to run multiple threads
+    // at once (e.g. on a mulitcore system).
+    // It also would be incorrect if the idle thread is never added to ready
+    // list.
+    int num_ready_threads = list_size(&ready_list);
+    system_load_avg = fixed_point_add(
+            fixed_point_mul(coeff1, system_load_avg),
+            fixed_point_fp_times_i(coeff2, num_ready_threads));
+}
+
+/*! Returns 100 times the system load average, rounded to the nearest int. */
+int thread_get_load_avg(void) {
+    return fixed_point_fptoi(fixed_point_fp_times_i(system_load_avg, 100));
 }
 
 /*! Returns 100 times the current thread's recent_cpu value. */
