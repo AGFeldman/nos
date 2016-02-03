@@ -12,6 +12,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#include "threads/fixed-point.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -63,12 +65,15 @@ static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
     Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+FPNUM system_load_avg = 0;
+
 static void kernel_thread(thread_func *, void *aux);
 
 static void idle(void *aux UNUSED);
 static struct thread *running_thread(void);
 static struct thread *next_thread_to_run(void);
-static void init_thread(struct thread *, const char *name, int priority);
+static void init_thread(struct thread *, const char *name, int priority,
+                        int nice, FPNUM recent_cpu);
 static bool is_thread(struct thread *) UNUSED;
 static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
@@ -95,7 +100,7 @@ void thread_init(void) {
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
-    init_thread(initial_thread, "main", PRI_DEFAULT);
+    init_thread(initial_thread, "main", PRI_DEFAULT, 0, 0);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
 }
@@ -121,14 +126,18 @@ void thread_tick(void) {
     struct thread *t = thread_current();
 
     /* Update statistics. */
-    if (t == idle_thread)
+    if (t == idle_thread) {
         idle_ticks++;
+    }
 #ifdef USERPROG
-    else if (t->pagedir != NULL)
+    else if (t->pagedir != NULL) {
         user_ticks++;
+    }
 #endif
-    else
+    else {
         kernel_ticks++;
+        t->recent_cpu = fixed_point_fp_plus_i(t->recent_cpu, 1);
+    }
 
     /* Check the first thread in sleep_list. */
     if (!list_empty(&sleep_list)) {
@@ -179,7 +188,8 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         return TID_ERROR;
 
     /* Initialize thread. */
-    init_thread(t, name, priority);
+    init_thread(t, name, priority, thread_get_nice(),
+                thread_current()->recent_cpu);
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -201,7 +211,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     thread_unblock(t);
 
     /* Yield if the new thread has higher priority */
-    if (thread_current()->priority < priority) {
+    if (thread_get_priority() < priority) {
         thread_yield();
     }
 
@@ -355,6 +365,7 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     thread_current()->priority = new_priority;
+    int new_effective_priority = thread_get_priority();
     unsigned char yield = 0;
     struct list_elem *e;
     /* If current thread no longer has the highest priority, then yield.
@@ -363,7 +374,8 @@ void thread_set_priority(int new_priority) {
     if (!list_empty(&ready_list)) {
         for (e = list_begin(&ready_list); e != list_end(&ready_list);
              e = list_next(e)) {
-            if (list_entry(e, struct thread, elem)->priority > new_priority) {
+            if (thread_get_other_priority(list_entry(e, struct thread, elem)) >
+                    new_effective_priority) {
                 yield = 1;
                 break;
             }
@@ -374,34 +386,78 @@ void thread_set_priority(int new_priority) {
     }
 }
 
-/*! Returns the current thread's priority. */
+/*! Returns the priority of thread t. In the presence of priority donation,
+    returns the higher (donated) priority. */
+int thread_get_other_priority(struct thread *t) {
+    int max_priority = t->priority;
+    struct list * locks_held = &t->locks_held;
+    if (!list_empty(locks_held)) {
+        struct list_elem *e;
+        for (e = list_begin(locks_held); e != list_end(locks_held);
+             e = list_next(e)) {
+            int priority = lock_get_priority(list_entry(e, struct lock, elem));
+            if (priority > max_priority) {
+                max_priority = priority;
+            }
+        }
+    }
+    return max_priority;
+}
+
+/*! Returns the current thread's priority.  In the presence of priority
+    donation, returns the higher (donated) priority. */
 int thread_get_priority(void) {
-    return thread_current()->priority;
+    return thread_get_other_priority(thread_current());
 }
 
 /*! Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED) {
-    /* Not yet implemented. */
+void thread_set_nice(int nice) {
+    thread_current()->nice = nice;
+    // TODO(agf): Recalculate the thread's priority based on the new value.
+    // If the thread no longer has the highest priority, yield.
 }
 
 /*! Returns the current thread's nice value. */
 int thread_get_nice(void) {
-    /* Not yet implemented. */
-    return 0;
+    return thread_current()->nice;
 }
 
-/*! Returns 100 times the system load average. */
+/*! Update the system_load_avg global variable according to an exponentially
+    weighted moving average. */
+void thread_update_load_avg(void) {
+    FPNUM coeff1 = fixed_point_frac(59, 60);
+    FPNUM coeff2 = fixed_point_frac(1, 60);
+
+    // The number running threads plus the number of ready threads, not
+    // counting the idle thread.
+    // Note that this calculation would be incorrect if it were possible to
+    // have multiple threads running at once, e.g. on multi-core systems.
+    int num_ready_threads = list_size(&ready_list);
+    if (thread_current() != idle_thread) {
+        num_ready_threads++;
+    }
+
+    system_load_avg = fixed_point_add(
+            fixed_point_mul(coeff1, system_load_avg),
+            fixed_point_fp_times_i(coeff2, num_ready_threads));
+}
+
+void thread_update_recent_cpus(void) {
+    // TODO(agf)
+}
+
+/*! Returns 100 times the system load average, rounded to the nearest int. */
 int thread_get_load_avg(void) {
-    /* Not yet implemented. */
-    return 0;
+    return fixed_point_fptoi(fixed_point_fp_times_i(system_load_avg, 100));
 }
 
-/*! Returns 100 times the current thread's recent_cpu value. */
+/*! Returns 100 times the current thread's recent_cpu value, rounded to the
+    nearest integer. */
 int thread_get_recent_cpu(void) {
-    /* Not yet implemented. */
-    return 0;
+    return fixed_point_fptoi(fixed_point_fp_times_i(
+                thread_current()->recent_cpu, 100));
 }
-
+
 /*! Idle thread.  Executes when no other thread is ready to run.
 
     The idle thread is initially put on the ready list by thread_start().
@@ -461,7 +517,8 @@ static bool is_thread(struct thread *t) {
 }
 
 /*! Does basic initialization of T as a blocked thread named NAME. */
-static void init_thread(struct thread *t, const char *name, int priority) {
+static void init_thread(struct thread *t, const char *name, int priority,
+                        int nice, FPNUM recent_cpu) {
     enum intr_level old_level;
 
     ASSERT(t != NULL);
@@ -473,7 +530,11 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
     t->priority = priority;
+    t->nice = nice;
+    t->recent_cpu = recent_cpu;
     t->magic = THREAD_MAGIC;
+
+    list_init(&t->locks_held);
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
@@ -504,12 +565,13 @@ static struct thread * next_thread_to_run(void) {
          * priority */
         struct list_elem *e = list_begin(&ready_list);
         struct thread *t = list_entry(e, struct thread, elem);
-        int max_priority_seen = t->priority;
+        int max_priority_seen = thread_get_other_priority(t);
         struct list_elem *e_for_max_priority_thread_seen = e;
         for (e = list_next(e); e != list_end(&ready_list); e = list_next(e)) {
             t = list_entry(e, struct thread, elem);
-            if (t->priority > max_priority_seen) {
-                max_priority_seen = t->priority;
+            int priority = thread_get_other_priority(t);
+            if (priority > max_priority_seen) {
+                max_priority_seen = priority;
                 e_for_max_priority_thread_seen = e;
             }
         }

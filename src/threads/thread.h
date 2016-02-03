@@ -97,6 +97,11 @@ struct thread {
     char name[16];                      /*!< Name (for debugging purposes). */
     uint8_t *stack;                     /*!< Saved stack pointer. */
     int priority;                       /*!< Priority. */
+    int nice;                           /*!< Niceness value. */
+    /*! A measure of how much recent time this thread has spent on the CPU,
+        expressed as a fixed-point real number.
+        TODO(agf): It is messy to use `int` here instead of FPNUM. */
+    int recent_cpu;
     struct list_elem allelem;           /*!< List element for all threads list. */
     /**@}*/
 
@@ -105,6 +110,8 @@ struct thread {
     struct list_elem elem;              /*!< List element. */
     int64_t wake_time;                      /*!< For sleeping, when to wake. */
     /**@}*/
+
+    struct list locks_held;             /*!< List of locks held. */
 
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */
@@ -123,6 +130,11 @@ struct thread {
     If true, use multi-level feedback queue scheduler.
     Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+/*! System-wide load average.
+    Should be updated once per second. */
+// TODO(agf): It is very messy to use `int` here instead of FPNUM
+extern int system_load_avg;
 
 void thread_init(void);
 void thread_start(void);
@@ -151,12 +163,15 @@ typedef void thread_action_func(struct thread *t, void *aux);
 
 void thread_foreach(thread_action_func *, void *);
 
+int thread_get_other_priority(struct thread *t);
 int thread_get_priority(void);
 void thread_set_priority(int);
 
 int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
+void thread_update_load_avg(void);
+void thread_update_recent_cpus(void);
 int thread_get_load_avg(void);
 
 #endif /* threads/thread.h */

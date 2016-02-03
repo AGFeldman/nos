@@ -81,13 +81,6 @@ int64_t timer_elapsed(int64_t then) {
 /*! Sleeps for approximately TICKS timer ticks.  Interrupts must
     be turned on. */
 void timer_sleep(int64_t ticks) {
-    /*
-    int64_t start = timer_ticks();
-
-    ASSERT(intr_get_level() == INTR_ON);
-    while (timer_elapsed(start) < ticlookingks)
-        thread_yield();
-*/
     ASSERT(intr_get_level() == INTR_ON);
     intr_disable();
     thread_sleep(ticks);
@@ -146,6 +139,10 @@ void timer_print_stats(void) {
 /*! Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
+    if (ticks % TIMER_FREQ == 0) {
+        thread_update_load_avg();
+        thread_update_recent_cpus();
+    }
     thread_tick();
 }
 
