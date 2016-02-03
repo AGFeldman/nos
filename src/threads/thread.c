@@ -339,6 +339,9 @@ void thread_set_priority(int new_priority) {
 /*! Returns the priority of thread t. In the presence of priority donation,
     returns the higher (donated) priority. */
 int thread_get_other_priority(struct thread *t) {
+    if (thread_mlfqs) {
+        return t->priority;
+    }
     int max_priority = t->priority;
     struct list * locks_held = &t->locks_held;
     if (!list_empty(locks_held)) {
@@ -362,9 +365,23 @@ int thread_get_priority(void) {
 
 /*! Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice) {
-    thread_current()->nice = nice;
+    struct thread *cur = thread_current();
+    cur->nice = nice;
     // TODO(agf): Recalculate the thread's priority based on the new value.
     // If the thread no longer has the highest priority, yield.
+    // TODO(agf): Refactor this to share code
+    int new_priority = fixed_point_fptoi_round_to_zero(
+            fixed_point_fp_minus_i(
+                fixed_point_fp_plus_i(
+                    fixed_point_fp_div_i(cur->recent_cpu, -4),
+                    PRI_MAX),
+                cur->nice * 2));
+    if (new_priority < PRI_MIN) {
+        new_priority = PRI_MIN;
+    } else if (new_priority > PRI_MAX) {
+        new_priority = PRI_MAX;
+    }
+    thread_set_priority(new_priority);
 }
 
 /*! Returns the current thread's nice value. */
@@ -392,8 +409,62 @@ void thread_update_load_avg(void) {
             fixed_point_fp_times_i(coeff2, num_ready_threads));
 }
 
+// TODO(agf)
+void thread_update_priorities(void) {
+    struct list_elem *e;
+    struct thread *t;
+    if (!list_empty(&all_list)) {
+        for (e = list_begin(&all_list); e != list_end(&all_list);
+                e = list_next(e)) {
+            t = list_entry(e, struct thread, allelem);
+            // TODO(agf): Is this really rounding down to the nearest integer
+            // (truncating)?
+            int new_priority = fixed_point_fptoi_round_to_zero(
+                    fixed_point_fp_minus_i(
+                        fixed_point_fp_plus_i(
+                            fixed_point_fp_div_i(t->recent_cpu, -4),
+                            PRI_MAX),
+                        t->nice * 2));
+            if (new_priority < PRI_MIN) {
+                new_priority = PRI_MIN;
+            } else if (new_priority > PRI_MAX) {
+                new_priority = PRI_MAX;
+            }
+            t->priority = new_priority;
+            // TODO(agf): Should we now yield if t is running and no longer
+            // has the highest priority?
+        }
+    }
+}
+
+/*! Update the recent_cpu value for each thread according to an exponentially
+    weighted moving avergae. */
 void thread_update_recent_cpus(void) {
-    // TODO(agf)
+    // TODO(agf): Assert that we are in an external interrupt handler
+    struct list_elem *e;
+    struct thread *t;
+    FPNUM load_avg_times2 = fixed_point_fp_times_i(system_load_avg, 2);
+    // TODO(agf): Probably don't need this outer if statement
+    if (!list_empty(&all_list)) {
+        for (e = list_begin(&all_list); e != list_end(&all_list);
+                e = list_next(e)) {
+            t = list_entry(e, struct thread, allelem);
+            // TODO(agf): Probably don't need this check
+            if (t == idle_thread) {
+                continue;
+            }
+            t->recent_cpu = fixed_point_fp_plus_i(
+                    fixed_point_mul(
+                        fixed_point_div(
+                            load_avg_times2,
+                            fixed_point_fp_plus_i(load_avg_times2, 1)),
+                        t->recent_cpu),
+                    t->nice);
+            // t->recent_cpu = fixed_point_fp_plus_i(
+            //         fixed_point_mul(t->recent_cpu, load_avg_times2),
+            //         t->nice);
+        }
+    }
 }
 
 /*! Returns 100 times the system load average, rounded to the nearest int. */
