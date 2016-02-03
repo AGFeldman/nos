@@ -14,7 +14,7 @@ typedef int FPNUM;  /* Fixed-point number */
 
 FPNUM fixed_point_itofp(int n);
 int fixed_point_fptoi(FPNUM x);
-int fixed_point_fptoi_round_to_zero(FPNUM x);
+int fixed_point_fptoi_truncate(FPNUM x);
 FPNUM fixed_point_add(FPNUM x, FPNUM y);
 FPNUM fixed_point_sub(FPNUM x, FPNUM y);
 FPNUM fixed_point_fp_plus_i(FPNUM x, int n);
@@ -40,10 +40,14 @@ inline int fixed_point_fptoi(FPNUM x) {
     return (x - FIXED_POINT_F / 2) / FIXED_POINT_F;
 }
 
-/* Returns the integer represented by the fixed point number x, rounding
- * towards zero. */
-inline int fixed_point_fptoi_round_to_zero(FPNUM x) {
-    return x / FIXED_POINT_F;
+/* Returns the integer represented by the fixed point number x, rounding down
+ * (truncating). */
+inline int fixed_point_fptoi_truncate(FPNUM x) {
+    int res = x / FIXED_POINT_F;
+    if (res < 0) {
+        res++;
+    }
+    return res;
 }
 
 /* Returns the sum of two fixed-point numbers as a fixed-point number. */

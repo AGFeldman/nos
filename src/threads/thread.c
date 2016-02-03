@@ -79,6 +79,7 @@ static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
+int get_new_priority(struct thread *t);
 
 /*! Initializes the threading system by transforming the code
     that's currently running into a thread.  This can't work in
@@ -137,7 +138,8 @@ void thread_tick(void) {
 #endif
     else {
         kernel_ticks++;
-        t->recent_cpu = fixed_point_fp_plus_i(t->recent_cpu, 1);
+        // Increment recent_cpu
+        t->recent_cpu += FIXED_POINT_F;
     }
 
     /* Check the first thread in sleep_list. */
@@ -365,19 +367,20 @@ void thread_foreach(thread_action_func *func, void *aux) {
 
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
+    // TODO(agf): We should probably disable interrupts around this loop,
+    // or otherwise protect waiters from race conditions
+    enum intr_level old_level = intr_disable();
     thread_current()->priority = new_priority;
     int new_effective_priority = thread_get_priority();
-    unsigned char yield = 0;
+    bool yield = false;
     struct list_elem *e;
-    /* If current thread no longer has the highest priority, then yield.
-     * TODO(agf): Could skip this if priority did not decrease.
-     */
+    /* If current thread no longer has the highest priority, then yield. */
     if (!list_empty(&ready_list)) {
         for (e = list_begin(&ready_list); e != list_end(&ready_list);
              e = list_next(e)) {
             if (thread_get_other_priority(list_entry(e, struct thread, elem)) >
                     new_effective_priority) {
-                yield = 1;
+                yield = true;
                 break;
             }
         }
@@ -385,6 +388,7 @@ void thread_set_priority(int new_priority) {
             thread_yield();
         }
     }
+    intr_set_level(old_level);
 }
 
 /*! Returns the priority of thread t. In the presence of priority donation,
@@ -414,25 +418,28 @@ int thread_get_priority(void) {
     return thread_get_other_priority(thread_current());
 }
 
-/*! Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice) {
-    struct thread *cur = thread_current();
-    cur->nice = nice;
-    // TODO(agf): Recalculate the thread's priority based on the new value.
-    // If the thread no longer has the highest priority, yield.
-    // TODO(agf): Refactor this to share code
-    int new_priority = fixed_point_fptoi_round_to_zero(
+/* Return the new priority that thread t would acquire as a result of the
+ * MLFQ priority-recalculation formula. */
+int get_new_priority(struct thread *t) {
+    int new_priority = fixed_point_fptoi_truncate(
             fixed_point_fp_minus_i(
                 fixed_point_fp_plus_i(
-                    fixed_point_fp_div_i(cur->recent_cpu, -4),
+                    fixed_point_fp_div_i(t->recent_cpu, -4),
                     PRI_MAX),
-                cur->nice * 2));
+                t->nice * 2));
     if (new_priority < PRI_MIN) {
         new_priority = PRI_MIN;
     } else if (new_priority > PRI_MAX) {
         new_priority = PRI_MAX;
     }
-    thread_set_priority(new_priority);
+    return new_priority;
+}
+
+/*! Sets the current thread's nice value to NICE. */
+void thread_set_nice(int nice) {
+    struct thread *cur = thread_current();
+    cur->nice = nice;
+    thread_set_priority(get_new_priority(cur));
 }
 
 /*! Returns the current thread's nice value. */
@@ -443,6 +450,7 @@ int thread_get_nice(void) {
 /*! Update the system_load_avg global variable according to an exponentially
     weighted moving average. */
 void thread_update_load_avg(void) {
+    // TODO(agf): Could pre-compute these
     FPNUM coeff1 = fixed_point_frac(59, 60);
     FPNUM coeff2 = fixed_point_frac(1, 60);
 
@@ -460,61 +468,39 @@ void thread_update_load_avg(void) {
             fixed_point_fp_times_i(coeff2, num_ready_threads));
 }
 
-// TODO(agf)
+/* Apply MLFQ thread-update rule to all threads. */
 void thread_update_priorities(void) {
     struct list_elem *e;
     struct thread *t;
-    if (!list_empty(&all_list)) {
-        for (e = list_begin(&all_list); e != list_end(&all_list);
-                e = list_next(e)) {
-            t = list_entry(e, struct thread, allelem);
-            // TODO(agf): Is this really rounding down to the nearest integer
-            // (truncating)?
-            int new_priority = fixed_point_fptoi_round_to_zero(
-                    fixed_point_fp_minus_i(
-                        fixed_point_fp_plus_i(
-                            fixed_point_fp_div_i(t->recent_cpu, -4),
-                            PRI_MAX),
-                        t->nice * 2));
-            if (new_priority < PRI_MIN) {
-                new_priority = PRI_MIN;
-            } else if (new_priority > PRI_MAX) {
-                new_priority = PRI_MAX;
-            }
-            t->priority = new_priority;
-            // TODO(agf): Should we now yield if t is running and no longer
-            // has the highest priority?
+    // TODO(agf): Yield to max priority seen?
+    int max_priority_seen = 0;
+    for (e = list_begin(&all_list); e != list_end(&all_list);
+            e = list_next(e)) {
+        t = list_entry(e, struct thread, allelem);
+        t->priority = get_new_priority(t);
+        if (t->priority > max_priority_seen) {
+            max_priority_seen = t->priority;
         }
+    }
+    if (thread_get_priority() < max_priority_seen) {
+        intr_yield_on_return();
     }
 }
 
 /*! Update the recent_cpu value for each thread according to an exponentially
     weighted moving avergae. */
 void thread_update_recent_cpus(void) {
-    // TODO(agf): Assert that we are in an external interrupt handler
     struct list_elem *e;
     struct thread *t;
     FPNUM load_avg_times2 = fixed_point_fp_times_i(system_load_avg, 2);
-    // TODO(agf): Probably don't need this outer if statement
-    if (!list_empty(&all_list)) {
-        for (e = list_begin(&all_list); e != list_end(&all_list);
-                e = list_next(e)) {
-            t = list_entry(e, struct thread, allelem);
-            // TODO(agf): Probably don't need this check
-            if (t == idle_thread) {
-                continue;
-            }
-            t->recent_cpu = fixed_point_fp_plus_i(
-                    fixed_point_mul(
-                        fixed_point_div(
-                            load_avg_times2,
-                            fixed_point_fp_plus_i(load_avg_times2, 1)),
-                        t->recent_cpu),
-                    t->nice);
-            // t->recent_cpu = fixed_point_fp_plus_i(
-            //         fixed_point_mul(t->recent_cpu, load_avg_times2),
-            //         t->nice);
-        }
+    FPNUM coeff = fixed_point_div(load_avg_times2,
+                                  fixed_point_fp_plus_i(load_avg_times2, 1));
+    for (e = list_begin(&all_list); e != list_end(&all_list);
+            e = list_next(e)) {
+        t = list_entry(e, struct thread, allelem);
+        t->recent_cpu = fixed_point_fp_plus_i(
+                fixed_point_mul(coeff, t->recent_cpu),
+                t->nice);
     }
 }
 
@@ -570,7 +556,7 @@ static void kernel_thread(thread_func *function, void *aux) {
     function(aux);       /* Execute the thread function. */
     thread_exit();       /* If function() returns, kill the thread. */
 }
-
+
 /*! Returns the running thread. */
 struct thread * running_thread(void) {
     uint32_t *esp;

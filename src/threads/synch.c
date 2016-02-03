@@ -132,11 +132,15 @@ void sema_up(struct semaphore *sema) {
     }
     sema->value++;
     intr_set_level(old_level);
-    // TODO(agf): Do we need the !intr_context() check?
-    if (!intr_context() && thread_get_priority() < max_priority_seen) {
-        thread_yield();
+    // If the unblocked thread has higher priority than the current thread,
+    // then yield.
+    if (thread_get_priority() < max_priority_seen) {
+        if (intr_context()) {
+            intr_yield_on_return();
+        } else {
+            thread_yield();
+        }
     }
-    // TODO(agf): Else, intr_yield_on_return or set yield_on_return=true ?
 }
 
 static void sema_test_helper(void *sema_);
@@ -259,6 +263,7 @@ int lock_get_priority(struct lock *lock) {
     struct list * waiters = &lock->semaphore.waiters;
     // TODO(agf): We should probably disable interrupts around this loop,
     // or otherwise protect waiters from race conditions
+    enum intr_level old_level = intr_disable();
     if (!list_empty(waiters)) {
         struct list_elem *e = list_begin(waiters);
         priority = thread_get_other_priority(
@@ -271,6 +276,7 @@ int lock_get_priority(struct lock *lock) {
             }
         }
     }
+    intr_set_level(old_level);
     return priority;
 }
 
