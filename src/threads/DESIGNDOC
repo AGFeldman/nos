@@ -53,26 +53,72 @@ which parts.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/*! States in a thread's life cycle. */
+enum thread_status {
+    THREAD_RUNNING,     /*!< Running thread. */
+    THREAD_READY,       /*!< Not running but ready to run. */
+    THREAD_BLOCKED,     /*!< Waiting for an event to trigger. */
+    THREAD_SLEEPING,    /*!< Waiting for a set length of time. */
+    THREAD_DYING        /*!< About to be destroyed. */
+};
+THREAD_SLEEPING is a new thread status option used when the thread will be 
+inactive for a predetermined length of time.
+
+Additionally, the thread struct has a new member, int64_t wake_time, which is
+used when the thread is in the sleep list to mark when it should be woken.
+
+/*! List of sleeping processes. Processes in this list are kept
+    sorted with least time to sleep at the front. */
+static struct list sleep_list;
+Analogous to ready_list, sleep_list keeps track of sleeping threads and their
+wake times.
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+timer_sleep disables interrupts if they were enabled, sets the status of the
+current thread to sleeping, sets its wake time, inserts it into sleep_list in
+the proper position (earliest to wake first), and then calls schedule. 
+When schedule returns to the thread (presumably after running some other 
+threads), timer_sleep enables interrupts and returns.
+
+To be woken, sleeping threads rely on thread_tick, called by the timer interrupt
+handler every tick. thread_tick iterates from the front of sleep_list, checking
+on and waking threads until it finds one that should not yet be woken.
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+sleep_list is kept sorted by thread_sleep so that the timer interrupt handler
+need not search through the entire list. thread_tick also calls timer_ticks only
+once and stores the result (we found this made a small difference).
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+timer_sleep turns off interrupts so that the thread going to sleep (setting
+wake time, being added to sleep_list, changing status) happens atomically,
+which means that on a single CPU system, it is not possible for multiple 
+threads to call timer_sleep simultaneously. One must finish before the next
+can begin.
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Interrupts are disabled so a thread cannot be interrupted while going to sleep.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+We considered the slightly different design of having an unsorted sleep list,
+which would lead to less time for a thread to go to sleep but more time for
+threads to wake up. We strongly preferred this design because waking happens
+in an interrupt handler, which we want to keep as short as possible.
 
 			 PRIORITY SCHEDULING
 			 ===================

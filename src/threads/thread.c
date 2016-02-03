@@ -142,7 +142,7 @@ void thread_tick(void) {
         t->recent_cpu += FIXED_POINT_F;
     }
 
-    int cur_timer_tick = timer_ticks();
+    int64_t cur_timer_tick = timer_ticks();
     /* Check the first thread in sleep_list. */
     while (!list_empty(&sleep_list)) {
         struct thread * s = list_entry(list_front(&sleep_list),
@@ -257,7 +257,9 @@ void thread_unblock(struct thread *t) {
     intr_set_level(old_level);
 }
 
-/*! Puts the current thread to sleep for a given number of clock ticks. */
+/*! Puts the current thread to sleep for a given number of clock ticks.
+    It will not run until woken by thread_ticks().
+    Interrupts must be disabled. */
 void thread_sleep(int64_t sleep_ticks) {
     ASSERT(!intr_context());
     ASSERT(intr_get_level() == INTR_OFF);
