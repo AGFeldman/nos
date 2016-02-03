@@ -35,6 +35,9 @@ static struct list all_list;
     sorted with least time to sleep at the front. */
 static struct list sleep_list;
 
+/*! Soonest wake time of all threads in sleep_list. */
+static int64_t soonest_wake;
+
 /*! Idle thread. */
 static struct thread *idle_thread;
 
@@ -99,6 +102,7 @@ void thread_init(void) {
     list_init(&ready_list);
     list_init(&all_list);
     list_init(&sleep_list);
+    soonest_wake = 0x7fffffffffffffffLL;
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
@@ -143,15 +147,18 @@ void thread_tick(void) {
     }
 
     int64_t cur_timer_tick = timer_ticks();
-    /* Check the first thread in sleep_list. */
-    while (!list_empty(&sleep_list)) {
-        struct thread * s = list_entry(list_front(&sleep_list),
-                                  struct thread, elem);
-        if (s->wake_time <= cur_timer_tick) {
-            thread_wake(s);
-        }
-        else {
-            break;
+
+    if (cur_timer_tick >= soonest_wake) {
+        /* Check the first thread in sleep_list. */
+        while (!list_empty(&sleep_list)) {
+            struct thread * s = list_entry(list_front(&sleep_list),
+                                      struct thread, elem);
+            if (s->wake_time <= cur_timer_tick) {
+                thread_wake(s);
+            }
+            else {
+                break;
+            }
         }
     }
     /* Enforce preemption. */
@@ -277,6 +284,10 @@ void thread_sleep(int64_t sleep_ticks) {
         }
     }
     list_insert(e, &(cur->elem));
+
+    if (&(cur->elem) == list_begin(&sleep_list)) {
+        soonest_wake = cur->wake_time;
+    }
 
     schedule();
 }

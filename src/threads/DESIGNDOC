@@ -73,6 +73,11 @@ static struct list sleep_list;
 Analogous to ready_list, sleep_list keeps track of sleeping threads and their
 wake times.
 
+/*! Soonest wake time of all threads in sleep_list. */
+static int64_t soonest_wake;
+soonest_wake is a shortcut to allow the timer interrupt handler to avoid
+traversing sleep_list when no threads are ready to be woken.
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
@@ -85,13 +90,16 @@ When schedule returns to the thread (presumably after running some other
 threads), timer_sleep enables interrupts and returns.
 
 To be woken, sleeping threads rely on thread_tick, called by the timer interrupt
-handler every tick. thread_tick iterates from the front of sleep_list, checking
+handler every tick. If any threads are ready to be woken (as indicated by 
+soonest_wake), thread_tick iterates from the front of sleep_list, checking
 on and waking threads until it finds one that should not yet be woken.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 sleep_list is kept sorted by thread_sleep so that the timer interrupt handler
-need not search through the entire list. thread_tick also calls timer_ticks only
+need not search through the entire list. The soonest wake time is stored as a 
+global variable so that it need not access the list at all if no threads are
+ready to be woken. And thread_tick also calls timer_ticks only
 once and stores the result (we found this made a small difference).
 
 ---- SYNCHRONIZATION ----
