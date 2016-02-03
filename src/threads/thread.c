@@ -141,11 +141,14 @@ void thread_tick(void) {
     }
 
     /* Check the first thread in sleep_list. */
-    if (!list_empty(&sleep_list)) {
+    while (!list_empty(&sleep_list)) {
         struct thread * s = list_entry(list_front(&sleep_list),
                                   struct thread, elem);
         if (s->wake_time <= timer_ticks()) {
             thread_wake(s);
+        }
+        else {
+            break;
         }
     }
     /* Enforce preemption. */
