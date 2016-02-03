@@ -142,11 +142,12 @@ void thread_tick(void) {
         t->recent_cpu += FIXED_POINT_F;
     }
 
+    int cur_timer_tick = timer_ticks();
     /* Check the first thread in sleep_list. */
     while (!list_empty(&sleep_list)) {
         struct thread * s = list_entry(list_front(&sleep_list),
                                   struct thread, elem);
-        if (s->wake_time <= timer_ticks()) {
+        if (s->wake_time <= cur_timer_tick) {
             thread_wake(s);
         }
         else {
