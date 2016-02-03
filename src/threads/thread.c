@@ -11,7 +11,9 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #include "threads/fixed-point.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -28,6 +30,10 @@ static struct list ready_list;
 /*! List of all processes.  Processes are added to this list
     when they are first scheduled and removed when they exit. */
 static struct list all_list;
+
+/*! List of sleeping processes. Processes in this list are kept
+    sorted with least time to sleep at the front. */
+static struct list sleep_list;
 
 /*! Idle thread. */
 static struct thread *idle_thread;
@@ -133,6 +139,14 @@ void thread_tick(void) {
         t->recent_cpu = fixed_point_fp_plus_i(t->recent_cpu, 1);
     }
 
+    /* Check the first thread in sleep_list. */
+    if (!list_empty(&sleep_list)) {
+        struct thread * s = list_entry(list_front(&sleep_list),
+                                  struct thread, elem);
+        if (s->wake_time <= timer_ticks()) {
+            thread_wake(s);
+        }
+    }
     /* Enforce preemption. */
     if (++thread_ticks >= TIME_SLICE)
         intr_yield_on_return();
@@ -233,6 +247,42 @@ void thread_unblock(struct thread *t) {
     ASSERT(t->status == THREAD_BLOCKED);
     list_push_back(&ready_list, &t->elem);
     t->status = THREAD_READY;
+    intr_set_level(old_level);
+}
+
+/*! Puts the current thread to sleep for a given number of clock ticks. */
+void thread_sleep(int64_t sleep_ticks) {
+    ASSERT(!intr_context());
+    ASSERT(intr_get_level() == INTR_OFF);
+
+    struct thread * cur = thread_current();
+    cur->status = THREAD_SLEEPING;
+    cur->wake_time = timer_ticks() + sleep_ticks;
+
+    struct list_elem *e;
+    for (e = list_begin(&sleep_list);
+            e != list_end(&sleep_list);
+            e = list_next(e)) {
+        if (cur->wake_time < list_entry(e, struct thread, elem)->wake_time) {
+            break;
+        }
+    }
+    list_insert(e, &(cur->elem));
+
+    schedule();
+}
+
+/*! Wakes the given thread. */
+void thread_wake(struct thread * sleeper) {
+    enum intr_level old_level;
+
+    ASSERT(is_thread(sleeper));
+
+    old_level = intr_disable();
+    ASSERT(sleeper->status == THREAD_SLEEPING);
+    list_remove(&(sleeper->elem));
+    list_push_back(&ready_list, &(sleeper->elem));
+    sleeper->status = THREAD_READY;
     intr_set_level(old_level);
 }
 
