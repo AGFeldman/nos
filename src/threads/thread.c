@@ -381,13 +381,12 @@ void thread_foreach(thread_action_func *func, void *aux) {
 
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
-    // TODO(agf): We should probably disable interrupts around this loop,
-    // or otherwise protect waiters from race conditions
+    bool yield = false;
+    struct list_elem *e;
+    // Disable interrupts
     enum intr_level old_level = intr_disable();
     thread_current()->priority = new_priority;
     int new_effective_priority = thread_get_priority();
-    bool yield = false;
-    struct list_elem *e;
     /* If current thread no longer has the highest priority, then yield. */
     if (!list_empty(&ready_list)) {
         for (e = list_begin(&ready_list); e != list_end(&ready_list);

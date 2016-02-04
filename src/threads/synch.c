@@ -261,10 +261,11 @@ bool lock_held_by_current_thread(const struct lock *lock) {
 int lock_get_priority(struct lock *lock) {
     int priority = -1;
     struct list * waiters = &lock->semaphore.waiters;
-    // TODO(agf): We should probably disable interrupts around this loop,
-    // or otherwise protect waiters from race conditions
+    // Disable interrupts as we iterate through list
     enum intr_level old_level = intr_disable();
     if (!list_empty(waiters)) {
+        // Iterate through threads waiting on the lock and determine the
+        // highest priority among them
         struct list_elem *e = list_begin(waiters);
         priority = thread_get_other_priority(
                 list_entry(e, struct thread, elem));
