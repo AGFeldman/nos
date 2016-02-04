@@ -231,7 +231,14 @@ the lock is released.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
-TODO(agf)
+A race condition might occur if two threads were to change their priorities
+simultaneously without disabling interrupts. Depending on which thread gets
+the CPU to iterate through ready_list, a thread earlier in the list with a 
+lower priority might wake, or a thread later in the list with higher priority.
+We could avoid this problem by locking ready_list, but schedule() needs to 
+access ready_list, and it is called from the timer interrupt handler. Since
+interrupts are not allowed to wait on locks, we could not have schedule()
+waiting to access ready_list. Instead, our implementation does not use a lock
 
 ---- RATIONALE ----
 
