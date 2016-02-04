@@ -11,7 +11,8 @@
 Julie Kew <julie.kew@gmail.com>
 Aaron Feldman <feldmando@gmail.com>
 
->> Specify how many late tokens you are using on this assignment:  
+>> Specify how many late tokens you are using on this assignment: 
+0
 
 >> What is the Git repository and commit hash for your submission?
    (You only need to include the commit-hash in the file you submit
@@ -41,8 +42,14 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
 
+   Julie: 10 hours
+   Aaron: 15 or 16 hours
+
 >> L2: What did each team member focus on for this assignment?  Keep
-   descriptions to 25-30 words or less.
+>> descriptions to 25-30 words or less.
+
+   Julie: Timer sleeping, debugging
+   Aaron: Priority donation, MLFQ, debugging
 
 			     ALARM CLOCK
 			     ===========
@@ -284,22 +291,49 @@ timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
  0      0   0   0  63  61  59   A 
- 4      
- 8
-12
-16
-20
-24
-28
-32
-36
+ 4      4   0   0  62  61  59   A
+ 8      8   0   0  61  61  59   A
+12      12  0   0  60  61  59   B
+16      12  4   0  60  60  59   B
+20      12  8   0  60  59  59   A
+24      16  8   0  59  59  59   A
+28      20  8   0  58  59  59   C
+32      20  8   4  58  59  58   B
+36      20  12  4  58  58  58   B
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
 
+It is not specified whether the running thread should increment its recent_cpu
+value before or after priorities are recalculated. We say that it increments
+before. This is the same behavior as our scheduler.
+
+If there are multiple non-running threads that have a higher priority than the
+running thread, it is not specified which thread gets run next. We run the
+least-recently-run thread; this matches the behavior of our scheduler, which
+pushes threads to the back of the ready_list when they are done running, and
+runs the first thread in the ready list that has the highest priority.
+
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+
+All of the work to update thread priorities, recent_cpu, and load_avg is done
+with calls from inside timer_interrupt(), which is the external timer interrupt
+handler. This same handler also calls thread_tick(), which sometimes calls
+intr_yield_on_return() to enable scheduling and preemption.
+
+So, little scheduling work is actually done inside an interrupt context, but
+updating the various values needed for scheduling does take a fair amount of
+work. This might degrade performance if it forces us to remain in interrupts
+for longer and prevents other interrupts from being handled on time. 
+
+Side note: We could optimize the code that occurs in the interrupt context. For
+example, instead of calculating the updated priority for all threads once per 4
+timer ticks, only calculate the updated the priority of the *current* thread,
+as long as load_avg has not changed and the recent_cpu values of other threads
+have not been re-calculated. 
+
 
 ---- RATIONALE ----
 
@@ -308,12 +342,33 @@ ticks   A   B   C   A   B   C   to run
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
 
+We use one queue to hold all ready threads, instead of segregating the threads
+into 64 queues based on priority. Additionally, we do not attempt to sort our
+queue based on thread priority. This approach keeps the code simple, but it
+means that we need to iterate through all threads to find one with the highest
+priority, so it might be possible to squeeze better performance out of other
+approaches.
+
+If we had more time, we might try to use 64 queues. However, there are also
+other optimizations that we could try first, such as the "side note" in
+question C4.
+
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
 >> decide to implement it the way you did?  If you created an
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
+
+I created an abstraction layer for fixed-point math. The abstraction layer's
+functions are basically the same functions that are summarized in the table at
+the end of section "B.6 Fixed-Point Real Arithmetic", and their implementation
+uses straightforward C arithmetic (i.e., no bit shifting). I think that this
+abstraction layer makes the code easier to understand and makes bugs
+significantly less likely. By marking the functions as `inline`, we are likely
+to avoid function call overhead. However, it is possible that use of this
+abstraction layer makes it hard or impossible to apply some micro-optimizations
+to long fixed-point arithmetic formulas.
 
 			  SURVEY QUESTIONS
 			  ================
@@ -327,15 +382,22 @@ penalized.  We can't fix things until we know about them.  :-)
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
 
+Assignment was reasonable
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
 
+It was unclear how much jitter should affect the tests. It seems that jitter
+would clearly have *some* influence on e.g. recent cpu time.
+
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+
+Hint: Make sure to initialize your lists.
 
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining

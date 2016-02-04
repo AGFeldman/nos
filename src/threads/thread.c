@@ -486,18 +486,10 @@ void thread_update_load_avg(void) {
 void thread_update_priorities(void) {
     struct list_elem *e;
     struct thread *t;
-    // TODO(agf): Yield to max priority seen?
-    int max_priority_seen = 0;
     for (e = list_begin(&all_list); e != list_end(&all_list);
             e = list_next(e)) {
         t = list_entry(e, struct thread, allelem);
         t->priority = get_new_priority(t);
-        if (t->priority > max_priority_seen) {
-            max_priority_seen = t->priority;
-        }
-    }
-    if (thread_get_priority() < max_priority_seen) {
-        intr_yield_on_return();
     }
 }
 
