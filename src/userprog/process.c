@@ -217,7 +217,7 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     char * fnaa_copy = palloc_get_page(0);
     // TOOD(agf): Check fnaa_copy is not NULL
     strlcpy(fnaa_copy, file_name_and_args, PGSIZE);
-    char * save_ptr_page = palloc_get_page(PAL_USER);
+    char * save_ptr_page = palloc_get_page(PAL_USER | PAL_ZERO);
     // TODO(agf): Check whether save_ptr_page is NULL
     char ** save_ptr = &save_ptr_page;
     // File name is the first token in file_name_and_args
@@ -304,7 +304,69 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     if (!setup_stack(esp))
         goto done;
 
-    // TODO(agf): Continue to parse fnaa_copy and put the arguments on the stack
+    /* Finish setting up the stack */
+    // Push the filename and arguments to the stack in the order that they
+    // appear
+    // TODO(agf): Instead of using PGSIZE here, should really use remaining
+    // PGSIZE
+    char * token = file_name;
+    int total_length = 0;
+    int num_tokens = 0;
+    char * orig_esp = *esp;
+    while (token) {
+        num_tokens += 1;
+        int length = strlen(token);
+        total_length += length + 1;  // +1 for the null-termination \0 char
+        *esp -= length;
+        int bytes_copied = strlcpy(*esp, token, PGSIZE);
+        ASSERT(bytes_copied == length);
+        // TODO(agf): Remove commented-out code
+        // printf("Length: %d\n", length);
+        // printf("String: %s\n", (char *) *esp);
+        ASSERT(*((char *)(*esp + length)) == '\0');
+        // TODO(agf): Make sure that this properly handles multiple adjacent
+        // spaces
+        token = strtok_r(NULL, " ", save_ptr);
+    }
+    char * argstart = *esp;
+    // Word-align the stack
+    int word_align_length = (4 - total_length % 4) % 4;
+    *esp -= word_align_length;
+    // Push the last item of argv[], which should be 0
+    *esp -= 4;
+    // Push the rest of argv. The rest of argv are pointer to the filename and
+    // args strings that we already pushed to the stack. So, iterate through
+    // the stack from bottom to top in order to find these pointers, and push
+    // them in the order that they are found.
+    char * p = orig_esp;
+    ASSERT(*p == '\0');
+    p -= 1;
+    int ntokens_processed = 0;
+    while (true) {
+        if (p == argstart) {
+            *esp -= 4;
+            *((char **)(*esp)) = argstart;
+            ASSERT(*argstart != '\0');
+            ntokens_processed += 1;
+            ASSERT(ntokens_processed == num_tokens);
+            break;
+        }
+        if (*p == '\0') {
+            *esp -= 4;
+            *((char **)(*esp)) = p + 1;
+            ASSERT(*(p + 1) != '\0');
+            ntokens_processed += 1;
+        }
+        p -= 1;
+    }
+    // Push the argv pointer itself
+    *esp -= 4;
+    *((char ***)(*esp)) = (char **)(*esp + 4);
+    // Push argc
+    *esp -= 4;
+    *((int *)(*esp)) = num_tokens;
+    // Push return address
+    *esp -= 4;
 
     /* Start address. */
     *eip = (void (*)(void)) ehdr.e_entry;
@@ -320,7 +382,6 @@ done:
 /* load() helpers. */
 
 static bool install_page(void *upage, void *kpage, bool writable);
-
 /*! Checks whether PHDR describes a valid, loadable segment in
     FILE and returns true if so, false otherwise. */
 static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
@@ -427,10 +488,7 @@ static bool setup_stack(void **esp) {
     if (kpage != NULL) {
         success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
         if (success)
-            // TODO(agf): This is a temporary change, as recommended in
-            // assignment writeup
-            // *esp = PHYS_BASE;
-            *esp = PHYS_BASE - 12;
+            *esp = PHYS_BASE;
         else
             palloc_free_page(kpage);
     }
