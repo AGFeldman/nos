@@ -312,17 +312,14 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     char * token = file_name;
     int total_length = 0;
     int num_tokens = 0;
-    char * orig_esp = *esp;
     while (token) {
         num_tokens += 1;
         int length = strlen(token);
-        total_length += length + 1;  // +1 for the null-termination \0 char
-        *esp -= length;
-        int bytes_copied = strlcpy(*esp, token, PGSIZE);
-        ASSERT(bytes_copied == length);
-        // TODO(agf): Remove commented-out code
-        // printf("Length: %d\n", length);
-        // printf("String: %s\n", (char *) *esp);
+        int length_including_nullterm = length + 1;
+        total_length += length_including_nullterm;
+        *esp -= length_including_nullterm;
+        int copied_length = strlcpy(*esp, token, PGSIZE);
+        ASSERT(copied_length == length);
         ASSERT(*((char *)(*esp + length)) == '\0');
         // TODO(agf): Make sure that this properly handles multiple adjacent
         // spaces
@@ -334,38 +331,33 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     *esp -= word_align_length;
     // Push the last item of argv[], which should be 0
     *esp -= 4;
-    // Push the rest of argv. The rest of argv are pointer to the filename and
+    // Push the rest of argv. The rest of argv are pointers to the filename and
     // args strings that we already pushed to the stack. So, iterate through
-    // the stack from bottom to top in order to find these pointers, and push
+    // the stack from top to bottom in order to find these pointers, and push
     // them in the order that they are found.
-    char * p = orig_esp;
-    ASSERT(*p == '\0');
-    p -= 1;
-    int ntokens_processed = 0;
-    while (true) {
-        if (p == argstart) {
-            *esp -= 4;
-            *((char **)(*esp)) = argstart;
-            ASSERT(*argstart != '\0');
-            ntokens_processed += 1;
-            ASSERT(ntokens_processed == num_tokens);
-            break;
-        }
+    ASSERT(*argstart != '\0');
+    *esp -= 4;
+    *((char **)(*esp)) = argstart;
+    int ntokens_processed = 1;
+    char * p = argstart;
+    while (ntokens_processed < num_tokens) {
         if (*p == '\0') {
             *esp -= 4;
             *((char **)(*esp)) = p + 1;
             ASSERT(*(p + 1) != '\0');
             ntokens_processed += 1;
         }
-        p -= 1;
+        p++;
     }
+    // TODO(agf): Assert something like p == orig_esp
+    ASSERT(ntokens_processed == num_tokens);
     // Push the argv pointer itself
     *esp -= 4;
     *((char ***)(*esp)) = (char **)(*esp + 4);
     // Push argc
     *esp -= 4;
     *((int *)(*esp)) = num_tokens;
-    // Push return address
+    // Push fake return address
     *esp -= 4;
 
     /* Start address. */

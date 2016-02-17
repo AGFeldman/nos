@@ -35,7 +35,6 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_READ) {
         printf("system call: read\n");
     } else if (syscall_num == SYS_WRITE) {
-        printf("system call: write\n");
         sys_write(f);
     } else if (syscall_num == SYS_SEEK) {
         printf("system call: seek\n");
