@@ -189,6 +189,7 @@ void thread_print_stats(void) {
 tid_t thread_create(const char *name, int priority, thread_func *function,
                     void *aux) {
     struct thread *t;
+    struct thread *current;
     struct kernel_thread_frame *kf;
     struct switch_entry_frame *ef;
     struct switch_threads_frame *sf;
@@ -202,9 +203,21 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         return TID_ERROR;
 
     /* Initialize thread. */
-    init_thread(t, name, priority, thread_get_nice(),
-                thread_current()->recent_cpu);
+    current = thread_current();
+    init_thread(t, name, priority, thread_get_nice(), current->recent_cpu);
     tid = t->tid = allocate_tid();
+
+    /* Add thread to the current thread's list of children */
+    list_push_back(&current->child_list, &t->child_list_elem);
+
+    // TODO(agf): Comment. And, is there a race condition here?
+    lock_init(&t->life_lock);
+    // TODO(agf): We want the other thread to acquire the lock
+    // So, this block is sort of like a "give lock to other thread" function
+    sema_down(&t->life_lock.semaphore);
+    t->life_lock.holder = t;
+    printf("Performed fack attempt to acquire lock\n");
+    //lock_acquire(&t->life_lock);
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
@@ -598,6 +611,12 @@ static void init_thread(struct thread *t, const char *name, int priority,
     t->magic = THREAD_MAGIC;
 
     list_init(&t->locks_held);
+    list_init(&t->child_list);
+    // TODO(agf): Should we worry about cleaning up this lock?
+    // lock_init(&t->life_lock);
+    // TODO(agf): If I perform this elsewhere, will the lock be acquired fast
+    // enough?
+    // lock_acquire(&t->life_lock);
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
@@ -680,7 +699,19 @@ void thread_schedule_tail(struct thread *prev) {
     if (prev != NULL && prev->status == THREAD_DYING &&
         prev != initial_thread) {
         ASSERT(prev != cur);
-        palloc_free_page(prev);
+        // TODO(agf): Instead of palloc_free_page, we should mark the thead
+        // as ready to be reaped, and possibly change its status. Then when
+        // the thread is reaped, call palloc_free_page on it.
+        prev->status = THREAD_DEAD;
+        // lock_release(&prev->life_lock);
+        // TODO(agf): We want the other thread to release the lock
+        // So, this block is sort of like a "release lock from other thread"
+        // function
+        // TODO(agf): Beware of race conditions?
+        prev->life_lock.holder = NULL;
+        sema_up(&prev->life_lock.semaphore);
+        // TODO(agf): Call palloc_free_page() from somewhere else
+        // palloc_free_page(prev);
     }
 }
 

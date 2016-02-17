@@ -88,7 +88,43 @@ static void start_process(void *file_name_) {
 int process_wait(tid_t child_tid UNUSED) {
     // TODO(agf): This is a temporary change as recommended in the assignment
     // writeup
-    while (true);
+
+    //     /* Iterate through the ready queue and return a thread with the highest
+    //      * priority */
+    //     struct list_elem *e = list_begin(&ready_list);
+    //     struct thread *t = list_entry(e, struct thread, elem);
+    //     int max_priority_seen = thread_get_other_priority(t);
+    //     struct list_elem *e_for_max_priority_thread_seen = e;
+    //     for (e = list_next(e); e != list_end(&ready_list); e = list_next(e)) {
+    //         t = list_entry(e, struct thread, elem);
+    //         int priority = thread_get_other_priority(t);
+    //         if (priority > max_priority_seen) {
+    //             max_priority_seen = priority;
+    //             e_for_max_priority_thread_seen = e;
+    //         }
+    //     }
+    //     list_remove(e_for_max_priority_thread_seen);
+    struct thread * current = thread_current();
+    struct thread * t;
+    struct list * child_list = &current->child_list;
+    struct list_elem *e;
+    for (e = list_begin(child_list); e != list_end(child_list);
+            e = list_next(e)) {
+        t = list_entry(e, struct thread, child_list_elem);
+        if (t->tid == child_tid) {
+            // int num_prints = 0;
+            // while (t->status != THREAD_DEAD && t->status != THREAD_DYING) {
+            //     if (num_prints < 10000) {
+            //         printf("Still waiting\n");
+            //         num_prints++;
+            //     }
+            // }
+            lock_acquire(&t->life_lock);
+            return 1;
+        }
+    }
+
+    // while (true);
     return -1;
 }
 
@@ -309,6 +345,8 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     // appear
     // TODO(agf): Instead of using PGSIZE here, should really use remaining
     // PGSIZE
+    // TODO(agf): This entire block uses pointer arithmetic on *esp, which is
+    // of type void*. We should avoid pointer arithmetic on void*.
     char * token = file_name;
     int total_length = 0;
     int num_tokens = 0;

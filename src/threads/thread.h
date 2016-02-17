@@ -9,6 +9,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -16,7 +17,10 @@ enum thread_status {
     THREAD_READY,       /*!< Not running but ready to run. */
     THREAD_BLOCKED,     /*!< Waiting for an event to trigger. */
     THREAD_SLEEPING,    /*!< Waiting for a set length of time. */
-    THREAD_DYING        /*!< About to be destroyed. */
+    THREAD_DYING,       /*!< About to be destroyed. */
+    /*! Thread is even closer to being destroyed, but its exit status has not
+        been read yet. */
+    THREAD_DEAD
 };
 
 /*! Thread identifier type.
@@ -112,6 +116,13 @@ struct thread {
     /**@}*/
 
     struct list locks_held;             /*!< List of locks held. */
+
+    /*! List element for the parent's child_list */
+    struct list_elem child_list_elem;
+    /*! List of children */
+    struct list child_list;
+    /*! Lock released when thread dies */
+    struct lock life_lock;
 
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */
