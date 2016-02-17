@@ -18,6 +18,7 @@ static void syscall_handler(struct intr_frame *f) {
         printf("system call: halt\n");
     } else if (syscall_num == SYS_EXIT) {
         printf("system call: exit\n");
+        thread_exit();
     } else if (syscall_num == SYS_WAIT) {
         printf("system call: wait\n");
     } else if (syscall_num == SYS_CREATE) {
@@ -41,5 +42,4 @@ static void syscall_handler(struct intr_frame *f) {
     } else {
         printf("system call: not handled!\n");
     }
-    thread_exit();
 }
