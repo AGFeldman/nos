@@ -79,6 +79,12 @@ static void start_process(void *file_name_) {
 
     This function will be implemented in problem 2-2.  For now, it does
     nothing. */
+// TODO(agf): Implementations notes below
+// Maintain the identity mapping between pid_t and tid_t
+// Each thread should have a linked list of its children
+// Find child_tid in the linked list and check its status
+// In order to wait, you try to acquire some lock that a child holds.
+// The child releases the lock when it dies.
 int process_wait(tid_t child_tid UNUSED) {
     // TODO(agf): This is a temporary change as recommended in the assignment
     // writeup
@@ -190,10 +196,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
                          bool writable);
 
-/*! Loads an ELF executable from FILE_NAME into the current thread.  Stores the
-    executable's entry point into *EIP and its initial stack pointer into *ESP.
-    Returns true if successful, false otherwise. */
-bool load(const char *file_name, void (**eip) (void), void **esp) {
+/*! Loads an ELF executable from FILE_NAME_AND_ARGS into the current thread.
+    Stores the executable's entry point into *EIP and its initial stack pointer
+    into *ESP.  Returns true if successful, false otherwise. */
+bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     struct thread *t = thread_current();
     struct Elf32_Ehdr ehdr;
     struct file *file = NULL;
@@ -206,6 +212,18 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     if (t->pagedir == NULL)
         goto done;
     process_activate();
+
+    // Make a copy of file_name_and_args so that this copy can be non-const
+    char * fnaa_copy = palloc_get_page(0);
+    // TOOD(agf): Check fnaa_copy is not NULL
+    strlcpy(fnaa_copy, file_name_and_args, PGSIZE);
+    char * save_ptr_page = palloc_get_page(PAL_USER);
+    // TODO(agf): Check whether save_ptr_page is NULL
+    char ** save_ptr = &save_ptr_page;
+    // File name is the first token in file_name_and_args
+    char * file_name = strtok_r(fnaa_copy, " ", save_ptr);
+    // TODO(agf): Check whether file_name is NULL
+    // TODO(agf): Should eventually free save_ptr_page
 
     /* Open executable file. */
     file = filesys_open(file_name);
@@ -285,6 +303,8 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     /* Set up stack. */
     if (!setup_stack(esp))
         goto done;
+
+    // TODO(agf): Continue to parse fnaa_copy and put the arguments on the stack
 
     /* Start address. */
     *eip = (void (*)(void)) ehdr.e_entry;
