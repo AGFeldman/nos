@@ -7,6 +7,7 @@
 
 static void syscall_handler(struct intr_frame *);
 
+void sys_exit(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
 
 void syscall_init(void) {
@@ -20,8 +21,7 @@ static void syscall_handler(struct intr_frame *f) {
     if (syscall_num == SYS_HALT) {
         printf("system call: halt\n");
     } else if (syscall_num == SYS_EXIT) {
-        printf("system call: exit\n");
-        thread_exit();
+        sys_exit(f);
     } else if (syscall_num == SYS_WAIT) {
         printf("system call: wait\n");
     } else if (syscall_num == SYS_CREATE) {
@@ -45,6 +45,12 @@ static void syscall_handler(struct intr_frame *f) {
     } else {
         printf("system call: not handled!\n");
     }
+}
+
+void sys_exit(struct intr_frame *f) {
+    int status = *((int *) f->esp + 1);
+    f->eax = status;
+    thread_exit();
 }
 
 void sys_write(struct intr_frame *f) {
