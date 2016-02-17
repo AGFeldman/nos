@@ -79,6 +79,12 @@ static void start_process(void *file_name_) {
 
     This function will be implemented in problem 2-2.  For now, it does
     nothing. */
+// TODO(agf): Implementations notes below
+// Maintain the identity mapping between pid_t and tid_t
+// Each thread should have a linked list of its children
+// Find child_tid in the linked list and check its status
+// In order to wait, you try to acquire some lock that a child holds.
+// The child releases the lock when it dies.
 int process_wait(tid_t child_tid UNUSED) {
     // TODO(agf): This is a temporary change as recommended in the assignment
     // writeup
