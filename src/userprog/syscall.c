@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "filesys/file.h"
 
 static void syscall_handler(struct intr_frame *);
 
@@ -32,14 +33,31 @@ static void syscall_handler(struct intr_frame *f) {
         printf("system call: read\n");
     } else if (syscall_num == SYS_WRITE) {
         printf("system call: write\n");
+        sys_write(f);
     } else if (syscall_num == SYS_SEEK) {
         printf("system call: seek\n");
     } else if (syscall_num == SYS_TELL) {
         printf("system call: tell\n");
     } else if (syscall_num == SYS_CLOSE) {
         printf("system call: close\n");
-    } else {
+    } else
         printf("system call: not handled!\n");
     }
     thread_exit();
+}
+
+void sys_write(struct intr_frame *f) {
+        int fd = *((int *) f->esp + 1);
+        char * buf = (char *) *((int *) f->esp + 2);
+        size_t n = (size_t) *((int *) f->esp + 3);
+
+        if (fd == 1) {
+            putbuf(buf, n);
+            f->eax = n;
+        }
+        else {
+            /*
+            f->eax = file_write(, (void *) buf, (off_t) n);
+            */
+        }
 }
