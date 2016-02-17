@@ -48,7 +48,6 @@ static void syscall_handler(struct intr_frame *f) {
 }
 
 void sys_exit(struct intr_frame *f) {
-    printf("system call: exit\n");
     int status = *((int *) f->esp + 1);
     f->eax = status;
     thread_exit();

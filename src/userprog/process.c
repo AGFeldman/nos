@@ -75,35 +75,8 @@ static void start_process(void *file_name_) {
     terminated by the kernel (i.e. killed due to an exception), returns -1.
     If TID is invalid or if it was not a child of the calling process, or if
     process_wait() has already been successfully called for the given TID,
-    returns -1 immediately, without waiting.
-
-    This function will be implemented in problem 2-2.  For now, it does
-    nothing. */
-// TODO(agf): Implementations notes below
-// Maintain the identity mapping between pid_t and tid_t
-// Each thread should have a linked list of its children
-// Find child_tid in the linked list and check its status
-// In order to wait, you try to acquire some lock that a child holds.
-// The child releases the lock when it dies.
+    returns -1 immediately, without waiting. */
 int process_wait(tid_t child_tid UNUSED) {
-    // TODO(agf): This is a temporary change as recommended in the assignment
-    // writeup
-
-    //     /* Iterate through the ready queue and return a thread with the highest
-    //      * priority */
-    //     struct list_elem *e = list_begin(&ready_list);
-    //     struct thread *t = list_entry(e, struct thread, elem);
-    //     int max_priority_seen = thread_get_other_priority(t);
-    //     struct list_elem *e_for_max_priority_thread_seen = e;
-    //     for (e = list_next(e); e != list_end(&ready_list); e = list_next(e)) {
-    //         t = list_entry(e, struct thread, elem);
-    //         int priority = thread_get_other_priority(t);
-    //         if (priority > max_priority_seen) {
-    //             max_priority_seen = priority;
-    //             e_for_max_priority_thread_seen = e;
-    //         }
-    //     }
-    //     list_remove(e_for_max_priority_thread_seen);
     struct thread * current = thread_current();
     struct thread * t;
     struct list * child_list = &current->child_list;
@@ -112,19 +85,22 @@ int process_wait(tid_t child_tid UNUSED) {
             e = list_next(e)) {
         t = list_entry(e, struct thread, child_list_elem);
         if (t->tid == child_tid) {
-            // int num_prints = 0;
-            // while (t->status != THREAD_DEAD && t->status != THREAD_DYING) {
-            //     if (num_prints < 10000) {
-            //         printf("Still waiting\n");
-            //         num_prints++;
-            //     }
-            // }
             lock_acquire(&t->life_lock);
-            return 1;
+            list_remove(e);
+            // TODO(agf): If the process somehow dies in an unusual way, will
+            // execution always reach this line, or will palloc_free_page()
+            // always get called somewhere else?
+            // TODO(agf): For some reason, this call leads to the following
+            // error:
+            // Kernel PANIC recursion at ../../threads/thread.c:333 in thread_current().
+            // palloc_free_page(t);
+            // TODO(agf): Return status instead of just 1
+            // One easy way to do this would be for sys_exit() to store a
+            // thread's exit status in the thread struct.
+            return 0;
         }
     }
 
-    // while (true);
     return -1;
 }
 
