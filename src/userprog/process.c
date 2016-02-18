@@ -36,8 +36,24 @@ tid_t process_execute(const char *file_name) {
         return TID_ERROR;
     strlcpy(fn_copy, file_name, PGSIZE);
 
+    /* Extract the first token, `file_name_only`, from `file_name`, since
+       `file_name` really contains the file name followed by arguments. */
+    // TODO(agf): This uses a lot of pages and copying, and duplicates some
+    // work from load().
+    char * fn_copy2 = palloc_get_page(0);
+    if (fn_copy2 == NULL)
+        return TID_ERROR;
+    strlcpy(fn_copy2, file_name, PGSIZE);
+    char * save_ptr_page = palloc_get_page(0);
+    if (save_ptr_page == NULL)
+        return TID_ERROR;
+    char ** save_ptr = &save_ptr_page;
+    char * file_name_only = strtok_r(fn_copy2, " ", save_ptr);
+    if (file_name_only == NULL)
+        return TID_ERROR;
+
     /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+    tid = thread_create(file_name_only, PRI_DEFAULT, start_process, fn_copy);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
     return tid;
@@ -94,7 +110,7 @@ int process_wait(tid_t child_tid UNUSED) {
             // error:
             // Kernel PANIC recursion at ../../threads/thread.c:333 in thread_current().
             // palloc_free_page(t);
-            // TODO(agf): Return status instead of just 1
+            // TODO(agf): Return status instead of just 0
             // One easy way to do this would be for sys_exit() to store a
             // thread's exit status in the thread struct.
             return 0;

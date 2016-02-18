@@ -50,21 +50,25 @@ static void syscall_handler(struct intr_frame *f) {
 void sys_exit(struct intr_frame *f) {
     int status = *((int *) f->esp + 1);
     f->eax = status;
+    // TODO(agf): Process termination messages should be printed even if exit()
+    // is not called. Maybe we should do this printing in process_exit().
+    printf("%s: exit(%d)\n", thread_current()->name, status);
+    // TODO(agf): Do we need to call process_exit()?
     thread_exit();
 }
 
 void sys_write(struct intr_frame *f) {
-        int fd = *((int *) f->esp + 1);
-        char * buf = (char *) *((int *) f->esp + 2);
-        size_t n = (size_t) *((int *) f->esp + 3);
+    int fd = *((int *) f->esp + 1);
+    char * buf = (char *) *((int *) f->esp + 2);
+    size_t n = (size_t) *((int *) f->esp + 3);
 
-        if (fd == 1) {
-            putbuf(buf, n);
-            f->eax = n;
-        }
-        else {
-            /*
-            f->eax = file_write(, (void *) buf, (off_t) n);
-            */
-        }
+    if (fd == 1) {
+        putbuf(buf, n);
+        f->eax = n;
+    }
+    else {
+        /*
+        f->eax = file_write(, (void *) buf, (off_t) n);
+        */
+    }
 }
