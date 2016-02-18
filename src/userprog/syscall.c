@@ -19,6 +19,7 @@ void check_many_pointer_validity(void *pmin, void *pmax);
 void sys_exit_helper(int status);
 void sys_exit(struct intr_frame *f);
 void sys_open(struct intr_frame *f);
+void sys_filesize(struct intr_frame *f);
 void sys_read(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
 void sys_wait(struct intr_frame *f);
@@ -58,10 +59,6 @@ static void syscall_handler(struct intr_frame *f) {
         sys_exit(f);
     } else if (syscall_num == SYS_EXEC) {
 
-    } else if (syscall_num == SYS_EXIT) {
-        printf("system call: wait\n");
-    } else if (syscall_num == SYS_EXIT) {
-        sys_exit(f);
     } else if (syscall_num == SYS_WAIT) {
         sys_wait(f);
     } else if (syscall_num == SYS_CREATE) {
@@ -71,7 +68,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_OPEN) {
         sys_open(f);
     } else if (syscall_num == SYS_FILESIZE) {
-
+        sys_filesize(f);
     } else if (syscall_num == SYS_READ) {
         sys_read(f);
     } else if (syscall_num == SYS_WRITE) {
@@ -109,13 +106,27 @@ void sys_exit(struct intr_frame *f) {
     sys_exit_helper(status);
 }
 
+// TODO(agf): Finish. Tests seem to be failing.
+void sys_wait(struct intr_frame *f) {
+    // TODO(agf): Maybe use pid_t instead of int
+    int * pid_p = (int *) f->esp + 1;
+    check_pointer_validity(pid_p);
+    int pid = *pid_p;
+    // TODO(agf): Waits for a child process pid and retrieves the child's exit
+    // status.
+    int status = process_wait(pid);
+    // TODO(agf): Check
+    f->eax = status;
+}
+
+
 void sys_open(struct intr_frame *f) {
     struct thread *intr_trd = thread_current();
     int i;
     for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
         if (intr_trd->open_files[i] == NULL) {
-
             char * file_name = (char *) *((int *) f->esp + 1);
+            check_pointer_validity(file_name);
             struct file * afile = filesys_open(file_name);
 
             /* Check file successfully opened */
@@ -131,40 +142,33 @@ void sys_open(struct intr_frame *f) {
     }
 }
 
-// TODO(agf): Finish. Tests seem to be failing.
-void sys_wait(struct intr_frame *f) {
-    // TODO(agf): Maybe use pid_t instead of int
-    int * pid_p = (int *) f->esp + 1;
-    check_pointer_validity(pid_p);
-    int pid = *pid_p;
-    // TODO(agf): Waits for a child process pid and retrieves the child's exit
-    // status.
-    int status = process_wait(pid);
-    // TODO(agf): Check
-    f->eax = status;
-}
+void sys_filesize(struct intr_frame *f) {
+    int fd = *((int *) f->esp + 1);
+    struct thread *intr_trd = thread_current();
+    struct file *afile = intr_trd->open_files[fd - 2];
+    f->eax = file_length(afile);
 
+}
 
 void sys_read(struct intr_frame *f) {
         int fd = *((int *) f->esp + 1);
         char * buf = (char *) *((int *) f->esp + 2);
-        size_t n = (size_t) *((int *) f->esp + 3);
-
+        unsigned n = (unsigned) *((int *) f->esp + 3);
         /* Read from console */
         if (fd == 0) {
-            size_t i;
+            unsigned i;
             for (i = 0; i < n; i++) {
                 buf[i] = input_getc();
                 /* TODO: what if input buffer has less than i keys? */
             }
-            f->eax = (uint16_t) n;
+            f->eax =  n;
         }
         /* Read from file */
         else {
             struct thread *intr_trd = thread_current();
             /* Subtract 2 because fd 0 and 1 are taken for IO */
             struct file *afile = intr_trd->open_files[fd - 2];
-            f->eax = (uint16_t) file_read(afile, (void *) buf, (off_t) n);
+            f->eax = file_read(afile, buf, n);
         }
 }
 
