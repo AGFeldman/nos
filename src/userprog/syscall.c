@@ -25,6 +25,7 @@ void sys_read(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
 void sys_seek(struct intr_frame *f);
 void sys_wait(struct intr_frame *f);
+void sys_create(struct intr_frame *f);
 
 void syscall_init(void) {
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -64,7 +65,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_WAIT) {
         sys_wait(f);
     } else if (syscall_num == SYS_CREATE) {
-
+        sys_create(f);
     } else if (syscall_num == SYS_REMOVE) {
 
     } else if (syscall_num == SYS_OPEN) {
@@ -217,6 +218,14 @@ void sys_write(struct intr_frame *f) { /*
             struct file *afile = intr_trd->open_files[fd - 2];
             f->eax = file_write(afile, buf, n);
         }
+}
+
+void sys_create(struct intr_frame *f) {
+    check_many_pointer_validity((int *) f->esp + 1, (int *) f->esp + 2);
+    char * file = (char *) ((int *) f->esp + 1);
+    unsigned int initial_size = *((unsigned int *) f->esp + 2);
+    int success = filesys_create(file, initial_size);
+    f->eax = success;
 }
 
 void sys_seek(struct intr_frame *f) {
