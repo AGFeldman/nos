@@ -14,10 +14,11 @@
 static void syscall_handler(struct intr_frame *);
 
 void sys_halt(void);
-void check_pointer_validity(void *p);
-void check_many_pointer_validity(void *pmin, void *pmax);
+void check_pointer_validity(const void *p);
+void check_many_pointer_validity(const void *pmin, const void *pmax);
 void sys_exit_helper(int status);
 void sys_exit(struct intr_frame *f);
+void sys_exec(struct intr_frame *f);
 void sys_open(struct intr_frame *f);
 void sys_read(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
@@ -28,7 +29,7 @@ void syscall_init(void) {
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
-void check_pointer_validity(void *p) {
+void check_pointer_validity(const void *p) {
     if (p == NULL || !is_user_vaddr(p) ||
             pagedir_get_page(thread_current()->pagedir, p) == NULL) {
         // TODO(agf): Make sure that we do not leak system resources, as
@@ -39,7 +40,7 @@ void check_pointer_validity(void *p) {
 
 /* Exit with status -1 if p is an invalid user pointer, for any p with
    pmin <= p <= pmax. */
-void check_many_pointer_validity(void *pmin, void *pmax) {
+void check_many_pointer_validity(const void *pmin, const void *pmax) {
     char * p;
     for (p = (char *)pmin; p <= (char *)pmax; p++) {
         check_pointer_validity(p);
@@ -57,7 +58,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_EXIT) {
         sys_exit(f);
     } else if (syscall_num == SYS_EXEC) {
-
+        sys_exec(f);
     } else if (syscall_num == SYS_EXIT) {
         printf("system call: wait\n");
     } else if (syscall_num == SYS_EXIT) {
@@ -107,6 +108,19 @@ void sys_exit(struct intr_frame *f) {
     int status = *status_p;
     f->eax = status;
     sys_exit_helper(status);
+}
+
+void sys_exec(struct intr_frame *f) {
+    // TODO(agf): "The parent process cannot return from `exec` until it knows
+    // whether the child process successfully loaded its executable. You must
+    // use appropriate synchronization to ensure this."
+    const char ** cmd_line_p = (const char **) f->esp + 1;
+    check_pointer_validity(cmd_line_p);
+    tid_t tid = process_execute(*cmd_line_p);
+    f->eax = tid;
+    if (tid == TID_ERROR) {
+        f->eax = -1;
+    }
 }
 
 void sys_open(struct intr_frame *f) {
