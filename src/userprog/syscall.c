@@ -2,6 +2,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -222,8 +223,12 @@ void sys_write(struct intr_frame *f) { /*
 
 void sys_create(struct intr_frame *f) {
     check_many_pointer_validity((int *) f->esp + 1, (int *) f->esp + 2);
-    char * file = (char *) ((int *) f->esp + 1);
+    char * file = *((char **) ((int *) f->esp + 1));
     unsigned int initial_size = *((unsigned int *) f->esp + 2);
+    if (strlen(file) == 0) {
+        f->eax = 0;
+        return;
+    }
     int success = filesys_create(file, initial_size);
     f->eax = success;
 }
