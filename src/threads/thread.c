@@ -597,6 +597,11 @@ static void init_thread(struct thread *t, const char *name, int priority,
     t->recent_cpu = recent_cpu;
     t->magic = THREAD_MAGIC;
 
+    int i;
+    for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
+        t->open_files[i] = NULL;
+    }
+
     list_init(&t->locks_held);
 
     old_level = intr_disable();

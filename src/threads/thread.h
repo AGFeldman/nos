@@ -19,6 +19,8 @@ enum thread_status {
     THREAD_DYING        /*!< About to be destroyed. */
 };
 
+#define MAX_FILE_DESCRIPTORS 16
+
 /*! Thread identifier type.
     You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -124,6 +126,9 @@ struct thread {
     /**@{*/
     unsigned magic;                     /* Detects stack overflow. */
     /**@}*/
+
+    /* Fixed-size array of pointers to open file structs */
+    struct file *open_files[16];
 };
 
 /*! If false (default), use round-robin scheduler.
