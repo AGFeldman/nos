@@ -167,7 +167,9 @@ void sys_filesize(struct intr_frame *f) {
 
 void sys_read(struct intr_frame *f) {
         int fd = *((int *) f->esp + 1);
+        /*
         printf("fd = %d\n", fd);
+        */
         char * buf = (char *) *((int *) f->esp + 2);
         unsigned n = (unsigned) *((int *) f->esp + 3);
         check_pointer_validity(buf);
