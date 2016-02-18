@@ -12,6 +12,8 @@
 #include "devices/shutdown.h"
 #include "devices/input.h"
 
+static struct lock filesys_lock;
+
 static void syscall_handler(struct intr_frame *);
 
 void sys_halt(void);
@@ -32,7 +34,16 @@ void sys_close(struct intr_frame *f);
 void sys_tell(struct intr_frame *f);
 
 void syscall_init(void) {
+    lock_init(&filesys_lock);
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+void filesys_lock_acquire(void) {
+    lock_acquire(&filesys_lock);
+}
+
+void filesys_lock_release(void) {
+    lock_release(&filesys_lock);
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
@@ -148,7 +159,9 @@ void sys_open(struct intr_frame *f) {
         if (intr_trd->open_files[i] == NULL) {
             char * file_name = (char *) *((int *) f->esp + 1);
             check_pointer_validity(file_name);
+            filesys_lock_acquire();
             struct file * afile = filesys_open(file_name);
+            filesys_lock_release();
 
             /* Check file successfully opened */
             if (!afile) {
@@ -174,7 +187,9 @@ void sys_close(struct intr_frame *f) {
     struct file *file = intr_trd->open_files[open_files_index];
     if (file != NULL) {
         // TODO(agf): Use synchronization here
+        filesys_lock_acquire();
         file_close(file);
+        filesys_lock_release();
         intr_trd->open_files[open_files_index] = NULL;
     }
 }
@@ -193,15 +208,18 @@ void sys_tell(struct intr_frame *f) {
         f->eax = -1;
         return;
     }
+    filesys_lock_acquire();
     f->eax = file_tell(file);
+    filesys_lock_release();
 }
 
 void sys_filesize(struct intr_frame *f) {
     int fd = *((int *) f->esp + 1);
     struct thread *intr_trd = thread_current();
     struct file *afile = intr_trd->open_files[fd - 2];
+    filesys_lock_acquire();
     f->eax = file_length(afile);
-
+    filesys_lock_release();
 }
 
 void sys_read(struct intr_frame *f) {
@@ -232,7 +250,9 @@ void sys_read(struct intr_frame *f) {
             if (!afile) {
                 sys_exit_helper(-1);
             }
+            filesys_lock_acquire();
             f->eax = file_read(afile, buf, n);
+            filesys_lock_release();
         }
 }
 
@@ -245,6 +265,7 @@ void sys_write(struct intr_frame *f) { /*
 
         /* Write to console */
         if (fd == 1) {
+            // TODO(agf): Might need to break into chunks?
             putbuf(buf, n);
             f->eax = (uint16_t) n;
         }
@@ -253,7 +274,9 @@ void sys_write(struct intr_frame *f) { /*
             struct thread *intr_trd = thread_current();
             /* Subtract 2 because fd 0 and 1 are taken for IO */
             struct file *afile = intr_trd->open_files[fd - 2];
+            filesys_lock_acquire();
             f->eax = file_write(afile, buf, n);
+            filesys_lock_release();
         }
 }
 
@@ -265,14 +288,18 @@ void sys_create(struct intr_frame *f) {
         f->eax = 0;
         return;
     }
+    filesys_lock_acquire();
     int success = filesys_create(file, initial_size);
+    filesys_lock_release();
     f->eax = success;
 }
 
 void sys_remove(struct intr_frame *f) {
     check_pointer_validity((int *) f->esp + 1);
     char * file = *((char **) ((int *) f->esp + 1));
+    filesys_lock_acquire();
     int success = filesys_remove(file);
+    filesys_lock_release();
     f->eax = success;
 }
 
@@ -281,7 +308,8 @@ void sys_seek(struct intr_frame *f) {
     off_t position = (off_t) *((int *) f->esp + 2);
     struct thread *intr_trd = thread_current();
     struct file *afile = intr_trd->open_files[fd - 2];
-    check_pointer_validity(afile);
 
+    filesys_lock_acquire();
     file_seek(afile, position);
+    filesys_lock_release();
 }

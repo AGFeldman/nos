@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -278,20 +279,26 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     // TODO(agf): Should eventually free save_ptr_page
 
     /* Open executable file. */
+    filesys_lock_acquire();
     file = filesys_open(file_name);
+    filesys_lock_release();
     if (file == NULL) {
         printf("load: %s: open failed\n", file_name);
         goto done;
     }
 
     /* Read and verify executable header. */
+    // TODO(agf): Make this tighter. We only need this lock for file_read().
+    filesys_lock_acquire();
     if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
         memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 ||
         ehdr.e_machine != 3 || ehdr.e_version != 1 ||
         ehdr.e_phentsize != sizeof(struct Elf32_Phdr) || ehdr.e_phnum > 1024) {
+        filesys_lock_release();
         printf("load: %s: error loading executable\n", file_name);
         goto done;
     }
+    filesys_lock_release();
 
     /* Read program headers. */
     file_ofs = ehdr.e_phoff;
@@ -300,10 +307,15 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
 
         if (file_ofs < 0 || file_ofs > file_length(file))
             goto done;
+        filesys_lock_acquire();
         file_seek(file, file_ofs);
 
-        if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
+        // TODO(agf): Make this synchronization tighter
+        if (file_read(file, &phdr, sizeof phdr) != sizeof phdr) {
+            filesys_lock_release();
             goto done;
+        }
+        filesys_lock_release();
 
         file_ofs += sizeof phdr;
 
@@ -421,7 +433,9 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
 
 done:
     /* We arrive here whether the load is successful or not. */
+    filesys_lock_acquire();
     file_close(file);
+    filesys_lock_release();
     return success;
 }
 
@@ -436,8 +450,13 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
         return false;
 
     /* p_offset must point within FILE. */
-    if (phdr->p_offset > (Elf32_Off) file_length(file))
+    // TODO(agf): Make this tighter
+    filesys_lock_acquire();
+    if (phdr->p_offset > (Elf32_Off) file_length(file)) {
+        filesys_lock_release();
         return false;
+    }
+    filesys_lock_release();
 
     /* p_memsz must be at least as big as p_filesz. */
     if (phdr->p_memsz < phdr->p_filesz)
@@ -490,7 +509,9 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
 
+    filesys_lock_acquire();
     file_seek(file, ofs);
+    filesys_lock_release();
     while (read_bytes > 0 || zero_bytes > 0) {
         /* Calculate how to fill this page.
            We will read PAGE_READ_BYTES bytes from FILE
@@ -504,10 +525,14 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
             return false;
 
         /* Load this page. */
+        // TODO(agf): Make this tighter
+        filesys_lock_acquire();
         if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
+            filesys_lock_release();
             palloc_free_page(kpage);
             return false;
         }
+        filesys_lock_release();
         memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
         /* Add the page to the process's address space. */
