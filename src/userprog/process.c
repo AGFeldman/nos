@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -53,15 +54,32 @@ tid_t process_execute(const char *file_name) {
         return TID_ERROR;
 
     /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create(file_name_only, PRI_DEFAULT, start_process, fn_copy);
-    if (tid == TID_ERROR)
+    // load_sema is used to block until the new thread has loaded the
+    // executable.
+    // loaded_correctly becomes true only if the thread successfully loaded
+    // the executable.
+    struct semaphore load_sema;
+    sema_init(&load_sema, 0);
+    bool loaded_correctly = false;
+    uint32_t aux[3] = {(uint32_t)fn_copy, (uint32_t)&load_sema,
+                       (uint32_t)&loaded_correctly};
+    tid = thread_create(file_name_only, PRI_DEFAULT, start_process, aux);
+    sema_down(&load_sema);
+    if (tid == TID_ERROR) {
         palloc_free_page(fn_copy);
+    }
+    if (loaded_correctly != 1) {
+        // TODO(agf): palloc_free_page here?
+        return TID_ERROR;
+    }
     return tid;
 }
 
 /*! A thread function that loads a user process and starts it running. */
-static void start_process(void *file_name_) {
-    char *file_name = file_name_;
+static void start_process(void * aux) {
+    char *file_name = (char *)((uint32_t *) aux)[0];
+    struct semaphore *load_sema = (struct semaphore *)((uint32_t *) aux)[1];
+    bool * loaded_correctly = (bool *)((uint32_t *) aux)[2];
     struct intr_frame if_;
     bool success;
 
@@ -71,6 +89,12 @@ static void start_process(void *file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
     success = load(file_name, &if_.eip, &if_.esp);
+
+    if (success) {
+        *loaded_correctly = true;
+    }
+
+    sema_up(load_sema);
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
