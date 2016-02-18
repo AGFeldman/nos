@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -14,6 +15,7 @@ void check_many_pointer_validity(void *pmin, void *pmax);
 void sys_exit_helper(int status);
 void sys_exit(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
+void sys_wait(struct intr_frame *f);
 
 void syscall_init(void) {
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -45,30 +47,31 @@ static void syscall_handler(struct intr_frame *f) {
 
     int syscall_num = *((int *) f->esp);
     if (syscall_num == SYS_HALT) {
-        printf("system call: halt\n");
+
     } else if (syscall_num == SYS_EXIT) {
         sys_exit(f);
     } else if (syscall_num == SYS_WAIT) {
-        printf("system call: wait\n");
+        sys_wait(f);
     } else if (syscall_num == SYS_CREATE) {
-        printf("system call: create\n");
+
     } else if (syscall_num == SYS_REMOVE) {
-        printf("system call: remove\n");
+
     } else if (syscall_num == SYS_OPEN) {
-        printf("system call: open\n");
+
     } else if (syscall_num == SYS_FILESIZE) {
-        printf("system call: filesize\n");
+
     } else if (syscall_num == SYS_READ) {
-        printf("system call: read\n");
+
     } else if (syscall_num == SYS_WRITE) {
         sys_write(f);
     } else if (syscall_num == SYS_SEEK) {
-        printf("system call: seek\n");
+
     } else if (syscall_num == SYS_TELL) {
-        printf("system call: tell\n");
+
     } else if (syscall_num == SYS_CLOSE) {
-        printf("system call: close\n");
+
     } else {
+        // TODO(agf)
         printf("system call: not handled!\n");
     }
 }
@@ -87,6 +90,19 @@ void sys_exit(struct intr_frame *f) {
     int status = *status_p;
     f->eax = status;
     sys_exit_helper(status);
+}
+
+// TODO(agf): Finish. Tests seem to be failing.
+void sys_wait(struct intr_frame *f) {
+    // TODO(agf): Maybe use pid_t instead of int
+    int * pid_p = (int *) f->esp + 1;
+    check_pointer_validity(pid_p);
+    int pid = *pid_p;
+    // TODO(agf): Waits for a child process pid and retrieves the child's exit
+    // status.
+    int status = process_wait(pid);
+    // TODO(agf): Check
+    f->eax = status;
 }
 
 void sys_write(struct intr_frame *f) {
