@@ -123,6 +123,9 @@ struct thread {
     /*! Lock released when thread dies */
     struct lock life_lock;
 
+    /*! Used to store exit status upon exit() syscall invocation. */
+    int exit_status;
+
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */
     /**@{*/

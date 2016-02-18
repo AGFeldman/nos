@@ -137,7 +137,7 @@ int process_wait(tid_t child_tid UNUSED) {
             // TODO(agf): Return status instead of just 0
             // One easy way to do this would be for sys_exit() to store a
             // thread's exit status in the thread struct.
-            return 0;
+            return t->exit_status;
         }
     }
 
