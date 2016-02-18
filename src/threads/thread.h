@@ -126,6 +126,9 @@ struct thread {
     /*! Used to store exit status upon exit() syscall invocation. */
     int exit_status;
 
+    /*! The executable file for this process, if applicable. */
+    struct file * executable;
+
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */
     /**@{*/
