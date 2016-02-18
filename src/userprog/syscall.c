@@ -94,7 +94,8 @@ void sys_halt() {
 void sys_exit_helper(int status) {
     // TODO(agf): Process termination messages should be printed even if exit()
     // is not called. Maybe we should do this printing in process_exit().
-    printf("%s: exit(%d)\n", thread_current()->name, status);
+    printf("%s: exit(%d)\n", thread_name(), status);
+    thread_current()->exit_status = status;
     // TODO(agf): Do we need to call process_exit()?
     thread_exit();
 }
