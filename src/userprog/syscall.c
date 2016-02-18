@@ -28,6 +28,7 @@ void sys_seek(struct intr_frame *f);
 void sys_wait(struct intr_frame *f);
 void sys_create(struct intr_frame *f);
 void sys_remove(struct intr_frame *f);
+void sys_close(struct intr_frame *f);
 
 void syscall_init(void) {
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -83,7 +84,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_TELL) {
 
     } else if (syscall_num == SYS_CLOSE) {
-
+        sys_close(f);
     } else {
         // TODO(agf)
         printf("system call: not handled!\n");
@@ -158,6 +159,22 @@ void sys_open(struct intr_frame *f) {
             f->eax = i + 2;
             return;
         }
+    }
+}
+
+void sys_close(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    int fd = *((int *) f->esp + 1);
+    int open_files_index = fd - 2;
+    if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
+        return;
+    }
+    struct thread * intr_trd = thread_current();
+    struct file *file = intr_trd->open_files[open_files_index];
+    if (file != NULL) {
+        // TODO(agf): Use synchronization here
+        file_close(file);
+        intr_trd->open_files[open_files_index] = NULL;
     }
 }
 
