@@ -23,6 +23,7 @@ void sys_open(struct intr_frame *f);
 void sys_filesize(struct intr_frame *f);
 void sys_read(struct intr_frame *f);
 void sys_write(struct intr_frame *f);
+void sys_seek(struct intr_frame *f);
 void sys_wait(struct intr_frame *f);
 
 void syscall_init(void) {
@@ -75,7 +76,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_WRITE) {
         sys_write(f);
     } else if (syscall_num == SYS_SEEK) {
-
+        sys_seek(f);
     } else if (syscall_num == SYS_TELL) {
 
     } else if (syscall_num == SYS_CLOSE) {
@@ -166,8 +167,10 @@ void sys_filesize(struct intr_frame *f) {
 
 void sys_read(struct intr_frame *f) {
         int fd = *((int *) f->esp + 1);
+        printf("fd = %d\n", fd);
         char * buf = (char *) *((int *) f->esp + 2);
         unsigned n = (unsigned) *((int *) f->esp + 3);
+        check_pointer_validity(buf);
         /* Read from console */
         if (fd == 0) {
             unsigned i;
@@ -179,19 +182,25 @@ void sys_read(struct intr_frame *f) {
         }
         /* Read from file */
         else {
+            if (fd > MAX_FILE_DESCRIPTORS + 1 || fd < 2) {
+                sys_exit_helper(-1);
+            }
             struct thread *intr_trd = thread_current();
             /* Subtract 2 because fd 0 and 1 are taken for IO */
             struct file *afile = intr_trd->open_files[fd - 2];
+            if (!afile) {
+                sys_exit_helper(-1);
+            }
             f->eax = file_read(afile, buf, n);
         }
 }
 
-void sys_write(struct intr_frame *f) {
+void sys_write(struct intr_frame *f) { /*
         check_many_pointer_validity((int *)f->esp + 1, (int *)f->esp + 3);
-
+*/
         int fd = *((int *) f->esp + 1);
         char * buf = (char *) *((int *) f->esp + 2);
-        size_t n = (size_t) *((int *) f->esp + 3);
+        unsigned n = (unsigned) *((int *) f->esp + 3);
 
         /* Write to console */
         if (fd == 1) {
@@ -203,6 +212,16 @@ void sys_write(struct intr_frame *f) {
             struct thread *intr_trd = thread_current();
             /* Subtract 2 because fd 0 and 1 are taken for IO */
             struct file *afile = intr_trd->open_files[fd - 2];
-            f->eax = (uint16_t) file_write(afile, (void *) buf, (off_t) n);
+            f->eax = file_write(afile, buf, n);
         }
+}
+
+void sys_seek(struct intr_frame *f) {
+    int fd = *((int *) f->esp + 1);
+    off_t position = (off_t) *((int *) f->esp + 2);
+    struct thread *intr_trd = thread_current();
+    struct file *afile = intr_trd->open_files[fd - 2];
+    check_pointer_validity(afile);
+
+    file_seek(afile, position);
 }
