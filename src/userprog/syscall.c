@@ -63,7 +63,7 @@ static void syscall_handler(struct intr_frame *f) {
     } else if (syscall_num == SYS_REMOVE) {
         printf("system call: remove\n");
     } else if (syscall_num == SYS_OPEN) {
-        printf("system call: open\n");
+        sys_open(f);
     } else if (syscall_num == SYS_FILESIZE) {
         printf("system call: filesize\n");
     } else if (syscall_num == SYS_READ) {
@@ -119,6 +119,7 @@ void sys_open(struct intr_frame *f) {
 
             intr_trd->open_files[i] = afile;
             f->eax = i + 2;
+            return;
         }
     }
     printf("Too many files open\n");
@@ -128,7 +129,7 @@ void sys_read(struct intr_frame *f) {
         int fd = *((int *) f->esp + 1);
         char * buf = (char *) *((int *) f->esp + 2);
         size_t n = (size_t) *((int *) f->esp + 3);
-/* TODO: check buf is valid memory location */
+
         /* Read from console */
         if (fd == 0) {
             size_t i;
@@ -148,10 +149,11 @@ void sys_read(struct intr_frame *f) {
 }
 
 void sys_write(struct intr_frame *f) {
+        check_many_pointer_validity((int *)f->esp + 1, (int *)f->esp + 3);
+
         int fd = *((int *) f->esp + 1);
         char * buf = (char *) *((int *) f->esp + 2);
         size_t n = (size_t) *((int *) f->esp + 3);
-/* TODO: check buf is valid memory location */
 
         /* Write to console */
         if (fd == 1) {
@@ -165,18 +167,4 @@ void sys_write(struct intr_frame *f) {
             struct file *afile = intr_trd->open_files[fd - 2];
             f->eax = (uint16_t) file_write(afile, (void *) buf, (off_t) n);
         }
-    check_many_pointer_validity((int *)f->esp + 1, (int *)f->esp + 3);
-    int fd = *((int *) f->esp + 1);
-    char * buf = (char *) *((int *) f->esp + 2);
-    size_t n = (size_t) *((int *) f->esp + 3);
-
-    if (fd == 1) {
-        putbuf(buf, n);
-        f->eax = n;
-    }
-    else {
-        /*
-        f->eax = file_write(, (void *) buf, (off_t) n);
-        */
-    }
 }
