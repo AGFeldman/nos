@@ -69,7 +69,7 @@ static void kill(struct intr_frame *f) {
        the kernel.  Real Unix-like operating systems pass most
        exceptions back to the process via signals, but we don't
        implement them. */
-     
+
     /* The interrupt frame's code segment value tells us where the
        exception originated. */
     switch (f->cs) {
@@ -79,7 +79,7 @@ static void kill(struct intr_frame *f) {
         printf("%s: dying due to interrupt %#04x (%s).\n",
                thread_name(), f->vec_no, intr_name(f->vec_no));
         intr_dump_frame(f);
-        thread_exit(); 
+        thread_exit();
 
     case SEL_KCSEG:
         /* Kernel's code segment, which indicates a kernel bug.
@@ -87,7 +87,7 @@ static void kill(struct intr_frame *f) {
            may cause kernel exceptions--but they shouldn't arrive
            here.)  Panic the kernel to make the point.  */
         intr_dump_frame(f);
-        PANIC("Kernel bug - unexpected interrupt in kernel"); 
+        PANIC("Kernel bug - unexpected interrupt in kernel");
 
     default:
         /* Some other code segment?  Shouldn't happen.  Panic the
@@ -134,14 +134,21 @@ static void page_fault(struct intr_frame *f) {
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
-    /* To implement virtual memory, delete the rest of the function
-       body, and replace it with code that brings in the page to
-       which fault_addr refers. */
-    printf("Page fault at %p: %s error %s page in %s context.\n",
-           fault_addr,
-           not_present ? "not present" : "rights violation",
-           write ? "writing" : "reading",
-           user ? "user" : "kernel");
-    kill(f);
+    // TODO(agf): This is somewhat ad hoc. Also, need to clean up resources.
+    // if (!not_present && user) {
+    f->eax = -1;
+    printf("%s: exit(-1)\n", thread_name());
+    thread_exit();
+
+    // TODO(agf): Remove
+    // /* To implement virtual memory, delete the rest of the function
+    //    body, and replace it with code that brings in the page to
+    //    which fault_addr refers. */
+    // printf("Page fault at %p: %s error %s page in %s context.\n",
+    //        fault_addr,
+    //        not_present ? "not present" : "rights violation",
+    //        write ? "writing" : "reading",
+    //        user ? "user" : "kernel");
+    // kill(f);
 }
 
