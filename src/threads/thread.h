@@ -9,6 +9,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -114,6 +115,13 @@ struct thread {
     /**@}*/
 
     struct list locks_held;             /*!< List of locks held. */
+
+    /*! List element for the parent's child_list */
+    struct list_elem child_list_elem;
+    /*! List of children */
+    struct list child_list;
+    /*! Lock released when thread dies */
+    struct lock life_lock;
 
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */

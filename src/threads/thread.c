@@ -189,6 +189,7 @@ void thread_print_stats(void) {
 tid_t thread_create(const char *name, int priority, thread_func *function,
                     void *aux) {
     struct thread *t;
+    struct thread *current;
     struct kernel_thread_frame *kf;
     struct switch_entry_frame *ef;
     struct switch_threads_frame *sf;
@@ -202,9 +203,18 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         return TID_ERROR;
 
     /* Initialize thread. */
-    init_thread(t, name, priority, thread_get_nice(),
-                thread_current()->recent_cpu);
+    current = thread_current();
+    init_thread(t, name, priority, thread_get_nice(), current->recent_cpu);
     tid = t->tid = allocate_tid();
+
+    /* Add thread to the current thread's list of children */
+    list_push_back(&current->child_list, &t->child_list_elem);
+
+    /* Make it look like thread t has acquired its life_lock */
+    lock_init(&t->life_lock);
+    sema_down(&t->life_lock.semaphore);
+    t->life_lock.holder = t;
+    // TODO(agf): Should we ever worry about cleaning up this lock?
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
@@ -603,6 +613,7 @@ static void init_thread(struct thread *t, const char *name, int priority,
     }
 
     list_init(&t->locks_held);
+    list_init(&t->child_list);
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
@@ -685,7 +696,9 @@ void thread_schedule_tail(struct thread *prev) {
     if (prev != NULL && prev->status == THREAD_DYING &&
         prev != initial_thread) {
         ASSERT(prev != cur);
-        palloc_free_page(prev);
+        // Make it look like prev has released its life_lock
+        prev->life_lock.holder = NULL;
+        sema_up(&prev->life_lock.semaphore);
     }
 }
 

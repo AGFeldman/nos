@@ -36,8 +36,24 @@ tid_t process_execute(const char *file_name) {
         return TID_ERROR;
     strlcpy(fn_copy, file_name, PGSIZE);
 
+    /* Extract the first token, `file_name_only`, from `file_name`, since
+       `file_name` really contains the file name followed by arguments. */
+    // TODO(agf): This uses a lot of pages and copying, and duplicates some
+    // work from load().
+    char * fn_copy2 = palloc_get_page(0);
+    if (fn_copy2 == NULL)
+        return TID_ERROR;
+    strlcpy(fn_copy2, file_name, PGSIZE);
+    char * save_ptr_page = palloc_get_page(0);
+    if (save_ptr_page == NULL)
+        return TID_ERROR;
+    char ** save_ptr = &save_ptr_page;
+    char * file_name_only = strtok_r(fn_copy2, " ", save_ptr);
+    if (file_name_only == NULL)
+        return TID_ERROR;
+
     /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+    tid = thread_create(file_name_only, PRI_DEFAULT, start_process, fn_copy);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
     return tid;
@@ -75,20 +91,32 @@ static void start_process(void *file_name_) {
     terminated by the kernel (i.e. killed due to an exception), returns -1.
     If TID is invalid or if it was not a child of the calling process, or if
     process_wait() has already been successfully called for the given TID,
-    returns -1 immediately, without waiting.
-
-    This function will be implemented in problem 2-2.  For now, it does
-    nothing. */
-// TODO(agf): Implementations notes below
-// Maintain the identity mapping between pid_t and tid_t
-// Each thread should have a linked list of its children
-// Find child_tid in the linked list and check its status
-// In order to wait, you try to acquire some lock that a child holds.
-// The child releases the lock when it dies.
+    returns -1 immediately, without waiting. */
 int process_wait(tid_t child_tid UNUSED) {
-    // TODO(agf): This is a temporary change as recommended in the assignment
-    // writeup
-    while (true);
+    struct thread * current = thread_current();
+    struct thread * t;
+    struct list * child_list = &current->child_list;
+    struct list_elem *e;
+    for (e = list_begin(child_list); e != list_end(child_list);
+            e = list_next(e)) {
+        t = list_entry(e, struct thread, child_list_elem);
+        if (t->tid == child_tid) {
+            lock_acquire(&t->life_lock);
+            list_remove(e);
+            // TODO(agf): If the process somehow dies in an unusual way, will
+            // execution always reach this line, or will palloc_free_page()
+            // always get called somewhere else?
+            // TODO(agf): For some reason, this call leads to the following
+            // error:
+            // Kernel PANIC recursion at ../../threads/thread.c:333 in thread_current().
+            // palloc_free_page(t);
+            // TODO(agf): Return status instead of just 0
+            // One easy way to do this would be for sys_exit() to store a
+            // thread's exit status in the thread struct.
+            return 0;
+        }
+    }
+
     return -1;
 }
 
@@ -309,6 +337,8 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     // appear
     // TODO(agf): Instead of using PGSIZE here, should really use remaining
     // PGSIZE
+    // TODO(agf): This entire block uses pointer arithmetic on *esp, which is
+    // of type void*. We should avoid pointer arithmetic on void*.
     char * token = file_name;
     int total_length = 0;
     int num_tokens = 0;
