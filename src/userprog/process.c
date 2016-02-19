@@ -53,6 +53,7 @@ tid_t process_execute(const char *file_name) {
     char * file_name_only = strtok_r(fn_copy2, " ", save_ptr);
     if (file_name_only == NULL)
         return TID_ERROR;
+    // TODO(agf): Eventually need to palloc_free_page(fn_copy2)
 
     /* Create a new thread to execute FILE_NAME. */
     // load_sema is used to block until the new thread has loaded the
@@ -70,7 +71,6 @@ tid_t process_execute(const char *file_name) {
         palloc_free_page(fn_copy);
     }
     if (loaded_correctly != 1) {
-        // TODO(agf): palloc_free_page here?
         return TID_ERROR;
     }
     return tid;
@@ -134,16 +134,8 @@ int process_wait(tid_t child_tid UNUSED) {
         if (t->tid == child_tid) {
             lock_acquire(&t->life_lock);
             list_remove(e);
-            // TODO(agf): If the process somehow dies in an unusual way, will
-            // execution always reach this line, or will palloc_free_page()
-            // always get called somewhere else?
-            // TODO(agf): For some reason, this call leads to the following
-            // error:
-            // Kernel PANIC recursion at ../../threads/thread.c:333 in thread_current().
-            // palloc_free_page(t);
-            // TODO(agf): Return status instead of just 0
-            // One easy way to do this would be for sys_exit() to store a
-            // thread's exit status in the thread struct.
+            // TODO(agf): should be able to free the page for t now, e.g. with
+            // a call to palloc_free_page(t)
             return t->exit_status;
         }
     }
@@ -157,7 +149,6 @@ void process_exit(void) {
     uint32_t *pd;
 
     if (cur->executable != NULL) {
-        // TODO(agf): Need synchronization?
         file_close(cur->executable);
         cur->executable = NULL;
     }
@@ -280,14 +271,19 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
 
     // Make a copy of file_name_and_args so that this copy can be non-const
     char * fnaa_copy = palloc_get_page(0);
-    // TOOD(agf): Check fnaa_copy is not NULL
+    if (fnaa_copy == NULL) {
+        printf("load: palloc failure\n");
+        goto done;
+    }
     strlcpy(fnaa_copy, file_name_and_args, PGSIZE);
     char * save_ptr_page = palloc_get_page(PAL_USER | PAL_ZERO);
-    // TODO(agf): Check whether save_ptr_page is NULL
+    if (save_ptr_page == NULL) {
+        printf("load: palloc failure\n");
+        goto done;
+    }
     char ** save_ptr = &save_ptr_page;
     // File name is the first token in file_name_and_args
     char * file_name = strtok_r(fnaa_copy, " ", save_ptr);
-    // TODO(agf): Check whether file_name is NULL
     // TODO(agf): Should eventually free save_ptr_page
 
     /* Open executable file. */
@@ -304,7 +300,6 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     }
 
     /* Read and verify executable header. */
-    // TODO(agf): Make this tighter. We only need this lock for file_read().
     filesys_lock_acquire();
     if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
         memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 ||
@@ -326,7 +321,6 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
         filesys_lock_acquire();
         file_seek(file, file_ofs);
 
-        // TODO(agf): Make this synchronization tighter
         if (file_read(file, &phdr, sizeof phdr) != sizeof phdr) {
             filesys_lock_release();
             goto done;
@@ -464,7 +458,6 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
         return false;
 
     /* p_offset must point within FILE. */
-    // TODO(agf): Make this tighter
     filesys_lock_acquire();
     if (phdr->p_offset > (Elf32_Off) file_length(file)) {
         filesys_lock_release();
@@ -539,7 +532,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
             return false;
 
         /* Load this page. */
-        // TODO(agf): Make this tighter
         filesys_lock_acquire();
         if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
             filesys_lock_release();
