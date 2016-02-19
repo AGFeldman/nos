@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "threads/fixed-point.h"
+#include "filesys/file.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -214,7 +215,6 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     lock_init(&t->life_lock);
     sema_down(&t->life_lock.semaphore);
     t->life_lock.holder = t;
-    // TODO(agf): Should we ever worry about cleaning up this lock?
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
@@ -349,12 +349,21 @@ void thread_exit(void) {
     process_exit();
 #endif
 
+    struct thread * cur = thread_current();
+    int i;
+    for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
+        if (cur->open_files[i] != NULL) {
+            file_close(cur->open_files[i]);
+            cur->open_files[i] = NULL;
+        }
+    }
+
     /* Remove thread from all threads list, set our status to dying,
        and schedule another process.  That process will destroy us
        when it calls thread_schedule_tail(). */
     intr_disable();
-    list_remove(&thread_current()->allelem);
-    thread_current()->status = THREAD_DYING;
+    list_remove(&cur->allelem);
+    cur->status = THREAD_DYING;
     schedule();
     NOT_REACHED();
 }
@@ -701,6 +710,7 @@ void thread_schedule_tail(struct thread *prev) {
         // Make it look like prev has released its life_lock
         prev->life_lock.holder = NULL;
         sema_up(&prev->life_lock.semaphore);
+        // TODO(agf): We never call anything like palloc_free_page(prev)
     }
 }
 
