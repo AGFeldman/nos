@@ -47,8 +47,8 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
 >> Make sure that each member's total time is listed.
 
-Julie: 13 hours
-Aaron: 16 hours
+Julie: 15 hours
+Aaron: 18 hours
 
 >> L2: What did each team member focus on for this assignment?  Keep
 >> descriptions to 25-30 words or less.
@@ -65,7 +65,12 @@ Aaron: debugging, DESIGNDOC, everything else.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-TODO(agf)
+No new or changed items of the form mentioned above. However, start_process()
+was changed to take `void * aux` as an argument, which is a pointer to a
+stack-allocated array of three uint32_t's, which are then converted to pointers
+to other types.
+
+See question B1 for changes that are relevant to system calls.
 
 ---- ALGORITHMS ----
 
@@ -107,25 +112,39 @@ and makes the system more modular.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+// To ensure only one process manipulates the file system at a time:
 static struct lock filesys_lock;
-To ensure only one process manipulates the file system at a time.
 
+// The maximum number of pointers to open file descriptors that each thread
+// holds in its thread struct
 #define MAX_FILE_DESCRIPTORS 16
-/* Fixed-size array of pointers to open file structs */
-struct file *open_files[16];
-For keeping track of the pointers to file structs a process currently has open.
 
-/*! List element for the parent's child_list */
-struct list_elem child_list_elem;
-/*! List of children */
-struct list child_list;
-For keeping track of parent-child relationships.
+// New members of the `thread` struct:
+    // For keeping track of the pointers to file structs a process currently
+    // has open:
+    /* Fixed-size array of pointers to open file structs */
+    struct file *open_files[16];
+    
+    // For keeping track of parent-child relationships:
+    /*! List element for the parent's child_list */
+    struct list_elem child_list_elem;
+    /*! List of children */
+    struct list child_list;
+    
+    // For releasing the file system lock when a thread holding it dies:
+    /*! Lock released when thread dies */
+    struct lock life_lock;
 
-/*! Lock released when thread dies */
-struct lock life_lock;
-For releasing the file system lock when a thread holding it dies.
+    /*! Used to store exit status upon exit() syscall invocation. */
+    int exit_status;
 
-TODO
+    /*! The executable file for this process, if applicable. */
+    struct file * executable;
+
+// The number of bytes in a page, since that does not appear to be defined 
+// elsewhere. This could be used in a function that validates a range of 
+// user pointers. We do not end up using it.
+#define PAGE_SIZE_BYTES
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
@@ -261,10 +280,11 @@ penalized.  We can't fix things until we know about them.  :-)
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
 
-It took quite a while to work through Pintos figuring out how everything 
-interacts. There may not be much that can be done about this, but it would
-have been useful to see, for instance, a trace of what happens when a syscall
-occurs or to have a list of the files syscall might include.
+It took quite a while to work through Pintos figuring out how everything
+interacts. There may not be much that can be done about this, but it would have
+been useful to see, for instance, a trace of what happens when a syscall occurs
+or to have a list of the files syscall might include. (Maybe we should just use
+gdb to produce the syscall trace.)
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
