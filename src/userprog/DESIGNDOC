@@ -67,6 +67,10 @@ which parts.
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
 
+Having the shell separate commands moves more code out of the kernel,
+which reduces the possibility of kernel bugs, makes the kernel less cumbersome,
+and makes the system more modular.
+
                              SYSTEM CALLS
                              ============
 
@@ -76,14 +80,41 @@ which parts.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+static struct lock filesys_lock;
+To ensure only one process manipulates the file system at a time.
+
+#define MAX_FILE_DESCRIPTORS 16
+/* Fixed-size array of pointers to open file structs */
+struct file *open_files[16];
+For keeping track of the pointers to file structs a process currently has open.
+
+/*! List element for the parent's child_list */
+struct list_elem child_list_elem;
+/*! List of children */
+struct list child_list;
+For keeping track of parent-child relationships.
+
+/*! Lock released when thread dies */
+struct lock life_lock;
+For releasing the file system lock when a thread holding it dies.
+
+TODO
+
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+
+File descriptors are indices (offset to account for stdio) into into arrays of
+file struct pointers specific to each process.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+
+Whenever the user attempts to access data, all pointers are checked for 
+validity - they must be not null, in userspace, and initialized.
+This is all checked before dereferencing the pointers.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -92,8 +123,19 @@ which parts.
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+In checking pointer validity, the kernel inspects the first address,
+the addresses p + 4096n up to the last relevant address, and the final address.
+So a full page would cause two page table inspections, as would 2 bytes.
+If we had a good way of checking whether two addresses were in the same page,
+we would be able to improve performance for calls using less than a page by
+inspecting the page table only once.
+
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+
+When wait() is called, the process searches through its list of children to 
+verify that the pid given is a valid one, then tries to acquire the life_lock
+of that child, which is released upon death.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -108,6 +150,15 @@ which parts.
 >> allocated resources (locks, buffers, etc.) are freed?  In a few
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
+
+We have a function check_pointer_validity() which exits with a return value of
+-1 upon failure through the function sys_exit_helper(). This makes the code
+perfectly readable and provides a convenient place to check that all resources
+are freed. In particular, if the process has acquired the file system lock, 
+it releases it here.
+
+It's possible syscall should be freeing read/write buffers when bad pointers 
+are passed, but currently it does not.
 
 ---- SYNCHRONIZATION ----
 
@@ -128,11 +179,20 @@ which parts.
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+This seemed like the most straightforward way. Check all the pointers up front,
+then use them freely.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+Advantages are that it's simple and did not require modifying the file system.
+Disadvantages are the relatively large amount of space the file table takes up
+in a thread and the small number of files that can be open.
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+We did not change this mapping.
 
 			  SURVEY QUESTIONS
 			  ================
@@ -145,6 +205,11 @@ penalized.  We can't fix things until we know about them.  :-)
 
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
+
+It took quite a while to work through Pintos figuring out how everything 
+interacts. There may not be much that can be done about this, but it would
+have been useful to see, for instance, a trace of what happens when a syscall
+occurs or to have a list of the files syscall might include.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
