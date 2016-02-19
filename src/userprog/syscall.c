@@ -12,6 +12,10 @@
 #include "devices/shutdown.h"
 #include "devices/input.h"
 
+// Page size, in bytes.
+// This seems like it should be defined elsewhere, but apparently is not.
+#define PAGE_SIZE_BYTES 4096
+
 static struct lock filesys_lock;
 
 static void syscall_handler(struct intr_frame *);
@@ -53,27 +57,22 @@ void filesys_lock_release(void) {
 void check_pointer_validity(const void *p) {
     if (p == NULL || !is_user_vaddr(p) ||
             pagedir_get_page(thread_current()->pagedir, p) == NULL) {
-        // TODO(agf): Make sure that we do not leak system resources, as
-        // mentioned in the assignment writeup
         sys_exit_helper(-1);
     }
 }
 
 /* Exit with status -1 if p is an invalid user pointer, for any p with
    pmin <= p <= pmax. */
-// TODO(agf): I have definitely been using this incorrectly
 void check_many_pointer_validity(const void *pmin, const void *pmax) {
     char * p;
-    for (p = (char *)pmin; p <= (char *)pmax; p++) {
+    for (p = (char *)pmin; p < (char *)pmax; p += PAGE_SIZE_BYTES) {
         check_pointer_validity(p);
     }
+    check_pointer_validity(pmax);
 }
 
 static void syscall_handler(struct intr_frame *f) {
-    // TODO: Finish
-
     check_pointer_validity(f->esp);
-
     int syscall_num = *((int *) f->esp);
     if (syscall_num == SYS_HALT) {
         sys_halt();
@@ -112,14 +111,11 @@ void sys_halt() {
 }
 
 void sys_exit_helper(int status) {
-    // TODO(agf): Process termination messages should be printed even if exit()
-    // is not called. Maybe we should do this printing in process_exit().
     if (filesys_lock_held()) {
         filesys_lock_release();
     }
     printf("%s: exit(%d)\n", thread_name(), status);
     thread_current()->exit_status = status;
-    // TODO(agf): Do we need to call process_exit()?
     thread_exit();
 }
 
@@ -131,24 +127,15 @@ void sys_exit(struct intr_frame *f) {
     sys_exit_helper(status);
 }
 
-// TODO(agf): Finish. Tests seem to be failing.
 void sys_wait(struct intr_frame *f) {
-    // TODO(agf): Maybe use pid_t instead of int
     int * pid_p = (int *) f->esp + 1;
     check_pointer_validity(pid_p);
     int pid = *pid_p;
-    // TODO(agf): Waits for a child process pid and retrieves the child's exit
-    // status.
     int status = process_wait(pid);
-    // TODO(agf): Check
     f->eax = status;
 }
 
-
 void sys_exec(struct intr_frame *f) {
-    // TODO(agf): "The parent process cannot return from `exec` until it knows
-    // whether the child process successfully loaded its executable. You must
-    // use appropriate synchronization to ensure this."
     const char ** cmd_line_p = (const char **) f->esp + 1;
     check_pointer_validity(cmd_line_p);
     tid_t tid = process_execute(*cmd_line_p);
@@ -163,6 +150,7 @@ void sys_open(struct intr_frame *f) {
     int i;
     for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
         if (intr_trd->open_files[i] == NULL) {
+            // char ** file_name_p = (char
             char * file_name = (char *) *((int *) f->esp + 1);
             check_pointer_validity(file_name);
             filesys_lock_acquire();
@@ -192,7 +180,6 @@ void sys_close(struct intr_frame *f) {
     struct thread * intr_trd = thread_current();
     struct file *file = intr_trd->open_files[open_files_index];
     if (file != NULL) {
-        // TODO(agf): Use synchronization here
         filesys_lock_acquire();
         file_close(file);
         filesys_lock_release();
@@ -229,67 +216,71 @@ void sys_filesize(struct intr_frame *f) {
 }
 
 void sys_read(struct intr_frame *f) {
-        int fd = *((int *) f->esp + 1);
-        /*
-        printf("fd = %d\n", fd);
-        */
-        char * buf = (char *) *((int *) f->esp + 2);
-        unsigned n = (unsigned) *((int *) f->esp + 3);
-        check_pointer_validity(buf);
-        /* Read from console */
-        if (fd == 0) {
-            unsigned i;
-            for (i = 0; i < n; i++) {
-                buf[i] = input_getc();
-                /* TODO: what if input buffer has less than i keys? */
-            }
-            f->eax =  n;
+    int fd = *((int *) f->esp + 1);
+    char * buf = (char *) *((int *) f->esp + 2);
+    unsigned n = (unsigned) *((int *) f->esp + 3);
+    check_pointer_validity(buf);
+    /* Read from console */
+    if (fd == 0) {
+        unsigned i;
+        for (i = 0; i < n; i++) {
+            buf[i] = input_getc();
+            /* TODO: what if input buffer has less than i keys? */
         }
-        /* Read from file */
-        else {
-            if (fd > MAX_FILE_DESCRIPTORS + 1 || fd < 2) {
-                sys_exit_helper(-1);
-            }
-            struct thread *intr_trd = thread_current();
-            /* Subtract 2 because fd 0 and 1 are taken for IO */
-            struct file *afile = intr_trd->open_files[fd - 2];
-            if (!afile) {
-                sys_exit_helper(-1);
-            }
-            filesys_lock_acquire();
-            f->eax = file_read(afile, buf, n);
-            filesys_lock_release();
+        f->eax =  n;
+    }
+    /* Read from file */
+    else {
+        if (fd > MAX_FILE_DESCRIPTORS + 1 || fd < 2) {
+            sys_exit_helper(-1);
         }
+        struct thread *intr_trd = thread_current();
+        /* Subtract 2 because fd 0 and 1 are taken for IO */
+        struct file *afile = intr_trd->open_files[fd - 2];
+        if (!afile) {
+            sys_exit_helper(-1);
+        }
+        filesys_lock_acquire();
+        f->eax = file_read(afile, buf, n);
+        filesys_lock_release();
+    }
 }
 
-void sys_write(struct intr_frame *f) { /*
-        check_many_pointer_validity((int *)f->esp + 1, (int *)f->esp + 3);
-*/
-        int fd = *((int *) f->esp + 1);
-        char * buf = (char *) *((int *) f->esp + 2);
-        unsigned n = (unsigned) *((int *) f->esp + 3);
+void sys_write(struct intr_frame *f) {
+    int * fd_p = (int *) f->esp + 1;
+    check_pointer_validity(fd_p);
+    int fd = *fd_p;
+    char ** buf_p = (char **) ((int *) f->esp + 2);
+    check_pointer_validity(buf_p);
+    char * buf = *buf_p;
+    unsigned * n_p = (unsigned *) ((int *) f->esp + 3);
+    check_pointer_validity(n_p);
+    unsigned n = *n_p;
 
-        /* Write to console */
-        if (fd == 1) {
-            // TODO(agf): Might need to break into chunks?
-            putbuf(buf, n);
-            f->eax = (uint16_t) n;
-        }
-        /* Write to file */
-        else {
-            struct thread *intr_trd = thread_current();
-            /* Subtract 2 because fd 0 and 1 are taken for IO */
-            struct file *afile = intr_trd->open_files[fd - 2];
-            filesys_lock_acquire();
-            f->eax = file_write(afile, buf, n);
-            filesys_lock_release();
-        }
+    /* Write to console */
+    if (fd == 1) {
+        // TODO(agf): Might need to break into chunks?
+        putbuf(buf, n);
+        f->eax = (uint16_t) n;
+    }
+    /* Write to file */
+    else {
+        struct thread *intr_trd = thread_current();
+        /* Subtract 2 because fd 0 and 1 are taken for IO */
+        struct file *afile = intr_trd->open_files[fd - 2];
+        filesys_lock_acquire();
+        f->eax = file_write(afile, buf, n);
+        filesys_lock_release();
+    }
 }
 
 void sys_create(struct intr_frame *f) {
-    check_many_pointer_validity((int *) f->esp + 1, (int *) f->esp + 2);
-    char * file = *((char **) ((int *) f->esp + 1));
-    unsigned int initial_size = *((unsigned int *) f->esp + 2);
+    char ** file_p = (char **) ((int *) f->esp + 1);
+    check_pointer_validity(file_p);
+    char * file = *file_p;
+    unsigned int * initial_size_p = (unsigned int *) f->esp + 2;
+    check_pointer_validity(initial_size_p);
+    unsigned int initial_size = *initial_size_p;
     if (strlen(file) == 0) {
         f->eax = 0;
         return;
@@ -310,7 +301,9 @@ void sys_remove(struct intr_frame *f) {
 }
 
 void sys_seek(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
     int fd = *((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 2);
     off_t position = (off_t) *((int *) f->esp + 2);
     struct thread *intr_trd = thread_current();
     struct file *afile = intr_trd->open_files[fd - 2];
