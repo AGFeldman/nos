@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
+#include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
@@ -110,17 +111,18 @@ static void kill(struct intr_frame *f) {
     description of "Interrupt 14--Page Fault Exception (#PF)" in
     [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame *f) {
-    bool not_present;  /* True: not-present page, false: writing r/o page. */
-    bool write;        /* True: access was write, false: access was read. */
-    bool user;         /* True: access by user, false: access by kernel. */
-    void *fault_addr;  /* Fault address. */
+    // TODO(agf): Remove
+    // bool not_present;  /* True: not-present page, false: writing r/o page. */
+    // bool write;        /* True: access was write, false: access was read. */
+    // bool user;         /* True: access by user, false: access by kernel. */
+    // void *fault_addr;  /* Fault address. */
 
-    /* Obtain faulting address, the virtual address that was accessed to cause
-       the fault.  It may point to code or to data.  It is not necessarily the
-       address of the instruction that caused the fault (that's f->eip).
-       See [IA32-v2a] "MOV--Move to/from Control Registers" and
-       [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception (#PF)". */
-    asm ("movl %%cr2, %0" : "=r" (fault_addr));
+    // /* Obtain faulting address, the virtual address that was accessed to cause
+    //    the fault.  It may point to code or to data.  It is not necessarily the
+    //    address of the instruction that caused the fault (that's f->eip).
+    //    See [IA32-v2a] "MOV--Move to/from Control Registers" and
+    //    [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception (#PF)". */
+    // asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
     /* Turn interrupts back on (they were only off so that we could
        be assured of reading CR2 before it changed). */
@@ -129,16 +131,16 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-    /* Determine cause. */
-    not_present = (f->error_code & PF_P) == 0;
-    write = (f->error_code & PF_W) != 0;
-    user = (f->error_code & PF_U) != 0;
+    // TODO(agf): Remove
+    // /* Determine cause. */
+    // not_present = (f->error_code & PF_P) == 0;
+    // write = (f->error_code & PF_W) != 0;
+    // user = (f->error_code & PF_U) != 0;
 
     // TODO(agf): This is somewhat ad hoc. Also, need to clean up resources.
     // if (!not_present && user) {
     f->eax = -1;
-    printf("%s: exit(-1)\n", thread_name());
-    thread_exit();
+    sys_exit_helper(-1);
 
     // TODO(agf): Remove
     // /* To implement virtual memory, delete the rest of the function
