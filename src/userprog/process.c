@@ -99,8 +99,14 @@ static void start_process(void * aux) {
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
-    if (!success)
+    if (!success) {
+        struct file * executable = thread_current()->executable;
+        if (executable != NULL) {
+            file_allow_write(executable);
+            thread_current()->executable = NULL;
+        }
         thread_exit();
+    }
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
@@ -149,6 +155,12 @@ int process_wait(tid_t child_tid UNUSED) {
 void process_exit(void) {
     struct thread *cur = thread_current();
     uint32_t *pd;
+
+    if (cur->executable != NULL) {
+        // TODO(agf): Need synchronization?
+        file_close(cur->executable);
+        cur->executable = NULL;
+    }
 
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
@@ -281,6 +293,10 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
     /* Open executable file. */
     filesys_lock_acquire();
     file = filesys_open(file_name);
+    if (file != NULL) {
+        file_deny_write(file);
+        thread_current()->executable = file;
+    }
     filesys_lock_release();
     if (file == NULL) {
         printf("load: %s: open failed\n", file_name);
@@ -433,9 +449,7 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
 
 done:
     /* We arrive here whether the load is successful or not. */
-    filesys_lock_acquire();
-    file_close(file);
-    filesys_lock_release();
+    // `file` gets closed in process_exit()
     return success;
 }
 

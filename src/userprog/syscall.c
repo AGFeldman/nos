@@ -19,7 +19,6 @@ static void syscall_handler(struct intr_frame *);
 void sys_halt(void);
 void check_pointer_validity(const void *p);
 void check_many_pointer_validity(const void *pmin, const void *pmax);
-void sys_exit_helper(int status);
 void sys_exit(struct intr_frame *f);
 void sys_exec(struct intr_frame *f);
 void sys_open(struct intr_frame *f);
@@ -42,6 +41,10 @@ void filesys_lock_acquire(void) {
     lock_acquire(&filesys_lock);
 }
 
+bool filesys_lock_held(void) {
+    return lock_held_by_current_thread(&filesys_lock);
+}
+
 void filesys_lock_release(void) {
     lock_release(&filesys_lock);
 }
@@ -58,6 +61,7 @@ void check_pointer_validity(const void *p) {
 
 /* Exit with status -1 if p is an invalid user pointer, for any p with
    pmin <= p <= pmax. */
+// TODO(agf): I have definitely been using this incorrectly
 void check_many_pointer_validity(const void *pmin, const void *pmax) {
     char * p;
     for (p = (char *)pmin; p <= (char *)pmax; p++) {
@@ -103,7 +107,6 @@ static void syscall_handler(struct intr_frame *f) {
     }
 }
 
-
 void sys_halt() {
     shutdown_power_off();
 }
@@ -111,6 +114,9 @@ void sys_halt() {
 void sys_exit_helper(int status) {
     // TODO(agf): Process termination messages should be printed even if exit()
     // is not called. Maybe we should do this printing in process_exit().
+    if (filesys_lock_held()) {
+        filesys_lock_release();
+    }
     printf("%s: exit(%d)\n", thread_name(), status);
     thread_current()->exit_status = status;
     // TODO(agf): Do we need to call process_exit()?
