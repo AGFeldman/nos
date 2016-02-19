@@ -11,7 +11,8 @@
 Julie Kew <julie.kew@gmail.com>
 Aaron Feldman <feldmando@gmail.com>
 
->> Specify how many late tokens you are using on this assignment:  
+>> Specify how many late tokens you are using on this assignment: 
+Using 1 late token
 
 >> What is the Git repository and commit hash for your submission?
 >> (You only need to include the commit-hash in the file you submit
@@ -25,9 +26,14 @@ Aaron Feldman <feldmando@gmail.com>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Tests hang when running with QEMU. We had to run with bochs: `make
+SIMULATOR="--bochs" check`.
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
+
+Talked briefly with Jalen Green and Keegan Ryan about process_wait().
 
 			               USER PROGRAMS
 			               =============
@@ -41,8 +47,14 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
 >> Make sure that each member's total time is listed.
 
+Julie: 13 hours
+Aaron: 16 hours
+
 >> L2: What did each team member focus on for this assignment?  Keep
 >> descriptions to 25-30 words or less.
+
+Julie: sys_open, sys_read, sys_write, other syscalls, debugging, DESIGNDOC.
+Aaron: debugging, DESIGNDOC, everything else.
 
                            ARGUMENT PASSING
                            ================
@@ -53,15 +65,30 @@ which parts.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+TODO(agf)
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+We push a command's argument strings onto the stack in the order in which they
+appear after the command (so, the last command string has the lowest address on
+the stack). Then, we iterate through the stack from top to bottom (lowest
+address to highest address) to find exactly where the string arguments ended up
+on the stack, and we push pointers to these arguments onto the stack in the
+order in which we find the arguments. 
+TODO(agf): We do not take precautions against overflowing the stack.
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+strtok_r() is re-entrant, but strtok() is not. Everything that you can do with
+strtok(), you can do with strtok_r(), so including strtok() would be
+unnecessary and potentially lead to bugs if programmers use it from multiple
+concurrent threads.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
@@ -115,6 +142,8 @@ file struct pointers specific to each process.
 Whenever the user attempts to access data, all pointers are checked for 
 validity - they must be not null, in userspace, and initialized.
 This is all checked before dereferencing the pointers.
+TODO(agf): This is the idea, but in practice, we might neglect to check some of
+these pointers.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -123,12 +152,15 @@ This is all checked before dereferencing the pointers.
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
-In checking pointer validity, the kernel inspects the first address,
-the addresses p + 4096n up to the last relevant address, and the final address.
-So a full page would cause two page table inspections, as would 2 bytes.
-If we had a good way of checking whether two addresses were in the same page,
-we would be able to improve performance for calls using less than a page by
-inspecting the page table only once.
+In checking pointer validity, the kernel inspects the first address, the
+addresses p + 4096n up to the last relevant address, and the final address.  So
+a full page would cause two page table inspections, as would 2 bytes.  If we
+had a good way of checking whether two addresses were in the same page, we
+would be able to improve performance for calls using less than a page by
+inspecting the page table only once. Such a "good method" could for example be
+a check of whether the two addresses have the same value modulo 4096, which
+*might* that the addresses are in the same page; but, this depends on how pages
+are laid out.
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
@@ -158,7 +190,7 @@ are freed. In particular, if the process has acquired the file system lock,
 it releases it here.
 
 It's possible syscall should be freeing read/write buffers when bad pointers 
-are passed, but currently it does not.
+are passed, but currently it does not. [TODO(agf)]
 
 ---- SYNCHRONIZATION ----
 
@@ -167,12 +199,35 @@ are passed, but currently it does not.
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
 
+Background: The "exec" system call results in a call to process_execute(),
+which calls thread_create() to start a thread that runs start_process(), and 
+start_process() loads the executable and jumps to it.
+
+We modified the arguments of start_process() to include two additional
+arguments: A semaphore and a pointer to a "loaded" boolean. The semaphore's
+count is initially zero, and the parent process, which is running
+process_execute, calls sema_down() after creating the child. This ensures that
+the parent process will not finish process_execute() until the child calls
+sema_up(), which the child does after it loads the executable. The child
+records whether the executable loaded successfully using the "loaded" boolean.
+
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
 >> calls wait(C) before C exits?  After C exits?  How do you ensure
 >> that all resources are freed in each case?  How about when P
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
+
+When wait(C) gets called before C exits, the parent thread will block, waiting
+for the child to release its life_lock, which the child only releases when it
+terminates.
+
+If wait(C) get called after C exits, the parent process collects information
+such as exit status from the child thread, which has already released its
+life_lock. I think this collection might possible because the thread struct for
+the child thread is never cleaned up, which seems like it leaks resources :(
+TODO(agf) It seems like the special cases, including orphaned children, are
+relevant for resource cleanup, and we might not be doing this resource cleanup.
 
 ---- RATIONALE ----
 
