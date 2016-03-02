@@ -10,12 +10,26 @@
 // Frame table entry
 // TODO(agf): For now, these fields are just *guesses* at what we might want
 struct ft_entry {
-    // User virtual address of page that occupies this frame
-    void * vaddr;
+    // Kernel virtual address of page that occupies this frame
+    void * kernel_vaddr;
+    // User virtual address (if any) of the page that occupies this frame
+    void * user_vaddr;
     int age;
     struct lock lock;
 };
 
 void frame_table_init(void);
+
+struct ft_entry * ft_lookup(void *);
+
+void ft_add_user_mapping(void *, void *);
+
+void ft_init_entry(void *);
+
+void ft_init_entries(void *, size_t);
+
+void ft_deinit_entry(void *);
+
+void ft_deinit_entries(void *, size_t);
 
 #endif  // vm/frame.h

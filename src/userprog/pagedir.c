@@ -11,6 +11,7 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+#include "vm/frame.h"
 
 static uint32_t *active_pd(void);
 static void invalidate_pagedir(uint32_t *);
@@ -39,7 +40,7 @@ void pagedir_destroy(uint32_t *pd) {
         uint32_t *pte;
 
         for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++) {
-            if (*pte & PTE_P) 
+            if (*pte & PTE_P)
                 palloc_free_page(pte_get_page(*pte));
         }
         palloc_free_page(pt);
@@ -65,8 +66,8 @@ static uint32_t * lookup_page(uint32_t *pd, const void *vaddr, bool create) {
     if (*pde == 0)  {
         if (create) {
             pt = palloc_get_page(PAL_ZERO);
-            if (pt == NULL) 
-                return NULL; 
+            if (pt == NULL)
+                return NULL;
 
             *pde = pde_create(pt);
         }
@@ -101,6 +102,7 @@ bool pagedir_set_page(uint32_t *pd, void *upage, void *kpage, bool writable) {
     if (pte != NULL) {
         ASSERT((*pte & PTE_P) == 0);
         *pte = pte_create_user(kpage, writable);
+        ft_add_user_mapping(upage, kpage);
         return true;
     }
     else {
@@ -180,7 +182,7 @@ void pagedir_set_accessed(uint32_t *pd, const void *vpage, bool accessed) {
             *pte |= PTE_A;
         }
         else {
-            *pte &= ~(uint32_t) PTE_A; 
+            *pte &= ~(uint32_t) PTE_A;
             invalidate_pagedir(pd);
         }
     }

@@ -22,22 +22,14 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/loader.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
-
-/*! A memory pool. */
-struct pool {
-    struct lock lock;                   /*!< Mutual exclusion. */
-    struct bitmap *used_map;            /*!< Bitmap of free pages. */
-    uint8_t *base;                      /*!< Base of pool. */
-};
+#include "vm/frame.h"
 
 /*! Two pools: one for kernel data, one for user pages. */
 static struct pool kernel_pool, user_pool;
 
 static void init_pool(struct pool *, void *base, size_t page_cnt,
                       const char *name);
-static bool page_from_pool(const struct pool *, void *page);
 
 /*! Initializes the page allocator.  At most USER_PAGE_LIMIT
     pages are put into the user pool. */
@@ -88,6 +80,13 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     else {
         if (flags & PAL_ASSERT)
             PANIC("palloc_get: out of pages");
+        // TODO(agf): Remove this when we support eviction
+        if (flags & PAL_USER)
+            PANIC("palloc_get: out of pages 2");
+    }
+
+    if (flags & PAL_USER) {
+        ft_init_entries(pages, page_cnt);
     }
 
     return pages;
@@ -128,6 +127,10 @@ void palloc_free_multiple(void *pages, size_t page_cnt) {
 
     ASSERT(bitmap_all(pool->used_map, page_idx, page_cnt));
     bitmap_set_multiple(pool->used_map, page_idx, page_cnt, false);
+
+    if (pool == &user_pool) {
+        ft_deinit_entries(pages, page_cnt);
+    }
 }
 
 /*! Frees the page at PAGE. */
@@ -156,7 +159,7 @@ static void init_pool(struct pool *p, void *base, size_t page_cnt,
 }
 
 /*! Returns true if PAGE was allocated from POOL, false otherwise. */
-static bool page_from_pool(const struct pool *pool, void *page) {
+bool page_from_pool(const struct pool *pool, void *page) {
     size_t page_no = pg_no(page);
     size_t start_page = pg_no(pool->base);
     size_t end_page = start_page + bitmap_size(pool->used_map);
@@ -164,3 +167,7 @@ static bool page_from_pool(const struct pool *pool, void *page) {
     return page_no >= start_page && page_no < end_page;
 }
 
+/*! Returns a pointer to user_pool. */
+struct pool * get_user_pool(void) {
+    return &user_pool;
+}
