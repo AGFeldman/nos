@@ -22,6 +22,7 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
+#include "vm/frame.h"
 
 #ifdef USERPROG
 
@@ -67,6 +68,7 @@ static size_t user_page_limit = SIZE_MAX;
 
 static void bss_init(void);
 static void paging_init(void);
+static void vm_init(void);
 
 static char **read_command_line(void);
 static char **parse_options(char **argv);
@@ -84,7 +86,7 @@ int main(void) NO_RETURN;
 int main(void) {
     char **argv;
 
-    /* Clear BSS. */  
+    /* Clear BSS. */
     bss_init();
 
     /* Break command line into arguments and parse options. */
@@ -94,7 +96,7 @@ int main(void) {
     /* Initialize ourselves as a thread so we can use locks,
        then enable console locking. */
     thread_init();
-    console_init();  
+    console_init();
 
     /* Greet user. */
     printf("Pintos booting with %'"PRIu32" kB RAM...\n",
@@ -104,6 +106,7 @@ int main(void) {
     palloc_init(user_page_limit);
     malloc_init();
     paging_init();
+    vm_init();
 
     /* Segmentation. */
 #ifdef USERPROG
@@ -188,6 +191,11 @@ static void paging_init(void) {
     asm volatile ("movl %0, %%cr3" : : "r" (vtop (init_page_dir)));
 }
 
+/*! Sets up data structures needed for virtual memory. */
+static void vm_init(void) {
+    frame_table_init();
+}
+
 /*! Breaks the kernel command line into words and returns them as
     an argv-like array. */
 static char ** read_command_line(void) {
@@ -267,14 +275,14 @@ static char ** parse_options(char **argv) {
        for reproducibility.  To fix this, give the "-r" option to
        the pintos script to request real-time execution. */
     random_init(rtc_get_time());
-  
+
     return argv;
 }
 
 /*! Runs the task specified in ARGV[1]. */
 static void run_task(char **argv) {
     const char *task = argv[1];
-  
+
     printf("Executing '%s':\n", task);
 
 #ifdef USERPROG
