@@ -23,6 +23,7 @@
 #include "threads/pte.h"
 #include "threads/thread.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 #ifdef USERPROG
 
@@ -194,6 +195,7 @@ static void paging_init(void) {
 /*! Sets up data structures needed for virtual memory. */
 static void vm_init(void) {
     frame_table_init();
+    supp_page_table_init();
 }
 
 /*! Breaks the kernel command line into words and returns them as
