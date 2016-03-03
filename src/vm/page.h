@@ -4,18 +4,29 @@
 #include <hash.h>
 #include <debug.h>
 
-// Supplemental page table entry
-// TODO(agf): For now, these fields are just *guesses* at what we might want
-// TODO(agf): Figure out where to get the memory for each spt_entry
-struct spt_entry {
-    // Hash table element
-    struct hash_elem hash_elem;
+// A combination of page directory and user virtual address used as a hash
+// table key for the supplemental page table.
+struct spt_key {
+    // Page directory that the user virtual address is associated with
+    uint32_t *pd;
 
     // User virtual address, which we will use as the input to a hash function.
     // This address should be the start of a page. TODO(agf): Assert this
     // in the appropriate functions, such as spt_entry_hash() and
     // spt_entry_lookup().
     void *addr;
+};
+
+// Supplemental page table entry
+// TODO(agf): For now, these fields are just *guesses* at what we might want
+// TODO(agf): Figure out where to get the memory for each spt_entry
+struct spt_entry {
+    // The page-directory and user-virtual-address combination that uniquely
+    // identifies this spt_entry.
+    struct spt_key key;
+
+    // Hash table element
+    struct hash_elem hash_elem;
 
     // Physical address
     void *physical_addr;
@@ -43,6 +54,8 @@ bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
 
 struct spt_entry * spt_entry_insert(struct spt_entry *entry);
 
-struct spt_entry * spt_entry_lookup(void *address);
+struct spt_entry * spt_entry_allocate(uint32_t *, void *);
+
+struct spt_entry * spt_entry_lookup(uint32_t *pd, void *);
 
 #endif  // vm/page.h
