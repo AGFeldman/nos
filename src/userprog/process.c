@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -251,6 +252,9 @@ static bool validate_segment(const struct Elf32_Phdr *, struct file *);
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
                          bool writable);
+static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
+                              uint32_t read_bytes, uint32_t zero_bytes,
+                              bool writable, uint32_t *pagedir);
 
 /*! Loads an ELF executable from FILE_NAME_AND_ARGS into the current thread.
     Stores the executable's entry point into *EIP and its initial stack pointer
@@ -365,8 +369,9 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
                     read_bytes = 0;
                     zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
                 }
-                if (!load_segment(file, file_page, (void *) mem_page,
-                                  read_bytes, zero_bytes, writable))
+                if (!load_segment_lazy(file, file_page, (void *) mem_page,
+                                       read_bytes, zero_bytes, writable,
+                                       t->pagedir))
                     goto done;
             }
             else {
@@ -553,6 +558,61 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
+    }
+    return true;
+}
+
+static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
+                              uint32_t read_bytes, uint32_t zero_bytes,
+                              bool writable, uint32_t *pagedir) {
+    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    ASSERT(pg_ofs(upage) == 0);
+    ASSERT(ofs % PGSIZE == 0);
+    while (read_bytes > 0 || zero_bytes > 0) {
+        // Calculate how to fill this page.
+        // We will read PAGE_READ_BYTES bytes from FILE
+        // and zero the final PAGE_ZERO_BYTES bytes.
+        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+        // TODO(agf): Free this later
+        struct spt_entry * spte = spt_entry_allocate(pagedir, upage);
+        ASSERT(spte != NULL);
+        spte->file = file;
+        spte->file_ofs = ofs;
+        spte->file_read_bytes = page_read_bytes;
+        spte->writable = writable;
+
+        // TODO(agf): Move this code to the page-fault handler to enable
+        // actually lazy loading
+        struct spt_entry * spte2 = spt_entry_lookup(thread_current()->pagedir,
+                                                    upage);
+        ASSERT(spte == spte2);
+        filesys_lock_acquire();
+        file_seek(spte2->file, spte2->file_ofs);
+        filesys_lock_release();
+        // Get a page of memory
+        uint8_t *kpage = palloc_get_page(PAL_USER);
+        ASSERT(kpage != NULL);
+        // Load this page
+        if (spte2->file_read_bytes != 0) {
+            filesys_lock_acquire();
+            int read_result = file_read(spte2->file, kpage,
+                                        spte2->file_read_bytes);
+            ASSERT(read_result == (int) spte2->file_read_bytes);
+            filesys_lock_release();
+        }
+        size_t spte2_zero_bytes = PGSIZE - spte2->file_read_bytes;
+        memset(kpage + spte2->file_read_bytes, 0, spte2_zero_bytes);
+        // Add the page to the process's address space
+        bool install_result = install_page(spte2->key.addr, kpage, writable);
+        ASSERT(install_result);
+
+        // Advance
+        read_bytes -= page_read_bytes;
+        zero_bytes -= page_zero_bytes;
+        upage += PGSIZE;
+        ofs += page_read_bytes;
     }
     return true;
 }

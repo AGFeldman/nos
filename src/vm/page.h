@@ -3,6 +3,7 @@
 
 #include <hash.h>
 #include <debug.h>
+#include "filesys/file.h"
 
 // A combination of page directory and user virtual address used as a hash
 // table key for the supplemental page table.
@@ -42,6 +43,11 @@ struct spt_entry {
     // - Starting offset in file
     // - Number of bytes to read
 
+    struct file *file;
+    off_t file_ofs;
+    size_t file_read_bytes;
+    bool writable;
+
     // TODO(agf): If the data is stored in swap, then we need info about that
 };
 
@@ -56,6 +62,6 @@ struct spt_entry * spt_entry_insert(struct spt_entry *entry);
 
 struct spt_entry * spt_entry_allocate(uint32_t *, void *);
 
-struct spt_entry * spt_entry_lookup(uint32_t *pd, void *);
+struct spt_entry * spt_entry_lookup(uint32_t *, void *);
 
 #endif  // vm/page.h
