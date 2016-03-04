@@ -55,8 +55,11 @@ void filesys_lock_release(void) {
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
 void check_pointer_validity(const void *p) {
-    if (p == NULL || !is_user_vaddr(p) ||
-            pagedir_get_page(thread_current()->pagedir, p) == NULL) {
+    if (p == NULL || !is_user_vaddr(p)) {
+        sys_exit_helper(-1);
+    }
+    uint32_t *pd = thread_current()->pagedir;
+    if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(pd, p) == NULL) {
         sys_exit_helper(-1);
     }
 }

@@ -19,7 +19,6 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
-#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -583,36 +582,63 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         spte->file_read_bytes = page_read_bytes;
         spte->writable = writable;
 
-        // TODO(agf): Move this code to the page-fault handler to enable
-        // actually lazy loading
-        struct spt_entry * spte2 = spt_entry_lookup(thread_current()->pagedir,
-                                                    upage);
-        ASSERT(spte == spte2);
-        filesys_lock_acquire();
-        file_seek(spte2->file, spte2->file_ofs);
-        filesys_lock_release();
-        // Get a page of memory
-        uint8_t *kpage = palloc_get_page(PAL_USER);
-        ASSERT(kpage != NULL);
-        // Load this page
-        if (spte2->file_read_bytes != 0) {
-            filesys_lock_acquire();
-            int read_result = file_read(spte2->file, kpage,
-                                        spte2->file_read_bytes);
-            ASSERT(read_result == (int) spte2->file_read_bytes);
-            filesys_lock_release();
-        }
-        size_t spte2_zero_bytes = PGSIZE - spte2->file_read_bytes;
-        memset(kpage + spte2->file_read_bytes, 0, spte2_zero_bytes);
-        // Add the page to the process's address space
-        bool install_result = install_page(spte2->key.addr, kpage, writable);
-        ASSERT(install_result);
-
         // Advance
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
         ofs += page_read_bytes;
+    }
+    return true;
+}
+
+// If |spte| describes a page from a file, then obtain a page of memory, copy
+// the data from that page of the file into the new page of memory, and
+// map the memory into the user's address space. If all this was successful,
+// return true. Otherwise, return false.
+bool load_page_from_spte(struct spt_entry *spte) {
+    if (spte == NULL || spte->file == NULL) {
+        return false;
+    }
+    // Here is an example situation in which filesys_lock could already be
+    // held:
+    // filesys_lock_acquire(), then file_read(), which causes a page fault,
+    // which causes load_page_from_spte() to be called.
+    bool already_held = filesys_lock_held();
+    if (!already_held) {
+        filesys_lock_acquire();
+    }
+    file_seek(spte->file, spte->file_ofs);
+    if (!already_held) {
+        filesys_lock_release();
+    }
+    // Get a page of memory
+    uint8_t *kpage = palloc_get_page(PAL_USER);
+    if (kpage == NULL) {
+        return false;
+    }
+    // Load this page
+    if (spte->file_read_bytes != 0) {
+        if (!already_held) {
+            filesys_lock_acquire();
+        }
+        if (file_read(spte->file, kpage, spte->file_read_bytes) !=
+                (int) spte->file_read_bytes) {
+            if (!already_held) {
+                filesys_lock_release();
+            }
+            palloc_free_page(kpage);
+            return false;
+        }
+        if (!already_held) {
+            filesys_lock_release();
+        }
+    }
+    size_t spte_zero_bytes = PGSIZE - spte->file_read_bytes;
+    memset(kpage + spte->file_read_bytes, 0, spte_zero_bytes);
+    // Add the page to the process's address space
+    if (!install_page(spte->key.addr, kpage, spte->writable)) {
+        palloc_free_page(kpage);
+        return false;
     }
     return true;
 }
