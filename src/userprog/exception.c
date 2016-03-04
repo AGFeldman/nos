@@ -6,6 +6,7 @@
 #include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "vm/page.h"
 
 /*! Number of page faults processed. */
@@ -146,6 +147,14 @@ static void page_fault(struct intr_frame *f) {
             load_page_from_spte(spte)) {
             // We weren't trying to write to a read-only page, and we
             // successfully loaded that page into memory from file
+            return;
+        }
+    }
+
+    // Grow the stack if the faulting address is a user address that
+    if (fault_addr != NULL && is_user_vaddr(fault_addr) &&
+        fault_addr >= (void *)((uint8_t *) f->esp - 32)) {
+        if (allocate_and_install_blank_page(fault_addr)) {
             return;
         }
     }
