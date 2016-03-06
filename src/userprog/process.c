@@ -253,7 +253,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          bool writable);
 static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
                               uint32_t read_bytes, uint32_t zero_bytes,
-                              bool writable, uint32_t *pagedir);
+                              bool writable);
 
 /*! Loads an ELF executable from FILE_NAME_AND_ARGS into the current thread.
     Stores the executable's entry point into *EIP and its initial stack pointer
@@ -369,8 +369,7 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
                     zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
                 }
                 if (!load_segment_lazy(file, file_page, (void *) mem_page,
-                                       read_bytes, zero_bytes, writable,
-                                       t->pagedir))
+                                       read_bytes, zero_bytes, writable))
                     goto done;
             }
             else {
@@ -563,12 +562,11 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
                               uint32_t read_bytes, uint32_t zero_bytes,
-                              bool writable, uint32_t *pagedir) {
+                              bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
     // TODO(agf): Do a more comprehensive review of concurrent access to SPT
-    spt_lock_acquire();
     while (read_bytes > 0 || zero_bytes > 0) {
         // Calculate how to fill this page.
         // We will read PAGE_READ_BYTES bytes from FILE
@@ -577,7 +575,7 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         // TODO(agf): Free this later
-        struct spt_entry * spte = spt_entry_allocate(pagedir, upage);
+        struct spt_entry * spte = spt_entry_allocate(upage);
         ASSERT(spte != NULL);
         spte->file = file;
         spte->file_ofs = ofs;
@@ -590,7 +588,6 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         upage += PGSIZE;
         ofs += page_read_bytes;
     }
-    spt_lock_release();
     return true;
 }
 

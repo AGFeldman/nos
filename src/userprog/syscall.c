@@ -71,7 +71,7 @@ void check_pointer_validity(const void *p, struct intr_frame *f) {
         // fault handler will grow the stack if needed.
     }
     uint32_t *pd = thread_current()->pagedir;
-    if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(pd, p) == NULL) {
+    if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(p) == NULL) {
         if (user_stack) {
             if (allocate_and_install_blank_page(p)) {
                 return;

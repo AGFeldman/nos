@@ -140,8 +140,7 @@ static void page_fault(struct intr_frame *f) {
 
     // Load from Supplemental Page Table, if possible
     if (not_present) {
-        struct spt_entry * spte = spt_entry_lookup(thread_current()->pagedir,
-                                                   fault_addr);
+        struct spt_entry * spte = spt_entry_lookup(fault_addr);
         if (spte != NULL &&
             (!write || spte->writable) &&
             load_page_from_spte(spte)) {

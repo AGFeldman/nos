@@ -2,22 +2,11 @@
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include <stdio.h>
 
-
-static struct hash supp_page_table;
-static struct lock spt_lock;
-
-void spt_lock_acquire(void) {
-    lock_acquire(&spt_lock);
-}
-
-void spt_lock_release(void) {
-    lock_release(&spt_lock);
-}
-
-void supp_page_table_init(void) {
-    hash_init(&supp_page_table, spt_entry_hash, spt_entry_less, NULL);
-    lock_init(&spt_lock);
+void spt_init(struct hash *spt) {
+    hash_init(spt, spt_entry_hash, spt_entry_less, NULL);
 }
 
 // Returns a hash value for spt_entry e.
@@ -33,8 +22,7 @@ bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
     const struct spt_entry *a = hash_entry(a_, struct spt_entry, hash_elem);
     const struct spt_entry *b = hash_entry(b_, struct spt_entry, hash_elem);
 
-    return  a->key.pd < b->key.pd ||
-            (a->key.pd == b->key.pd && a->key.addr < b->key.addr);
+    return  a->key.addr < b->key.addr;
 }
 
 // Attempts to insert an spt_entry into the supplemental page table. If the
@@ -43,7 +31,7 @@ bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
 // Otherwise, the insertion succeeds and we return NULL.
 struct spt_entry * spt_entry_insert(struct spt_entry *entry) {
     ASSERT(pg_round_down(entry->key.addr) == entry->key.addr);
-    struct hash_elem * elem = hash_insert(&supp_page_table,
+    struct hash_elem * elem = hash_insert(&thread_current()->spt,
                                           &entry->hash_elem);
     return elem == NULL ? NULL : hash_entry(elem, struct spt_entry, hash_elem);
 }
@@ -52,10 +40,9 @@ struct spt_entry * spt_entry_insert(struct spt_entry *entry) {
 // Should only be called from the kernel, since this uses kernel malloc().
 // Returns the address of the newly allocated spt_entry, or NULL if the table
 // already had an entry with that combination of page directory and address.
-struct spt_entry * spt_entry_allocate(uint32_t *pd, void *address) {
+struct spt_entry * spt_entry_allocate(void *address) {
     struct spt_entry * entry = (struct spt_entry *) malloc(sizeof(
                                                            struct spt_entry));
-    entry->key.pd = pd;
     entry->key.addr = pg_round_down(address);
 
     // It is important that some fields be initialized
@@ -75,12 +62,11 @@ struct spt_entry * spt_entry_allocate(uint32_t *pd, void *address) {
 // Returns the supplemental page table entry for the given combination of
 // page directory and virtual address.
 // Returns NULL if key not found.
-struct spt_entry * spt_entry_lookup(uint32_t *pd, void *address) {
+struct spt_entry * spt_entry_lookup(void *address) {
     struct spt_entry entry;
     struct hash_elem *elem;
 
-    entry.key.pd = pd;
     entry.key.addr = pg_round_down(address);
-    elem = hash_find(&supp_page_table, &entry.hash_elem);
+    elem = hash_find(&thread_current()->spt, &entry.hash_elem);
     return elem != NULL ? hash_entry(elem, struct spt_entry, hash_elem) : NULL;
 }

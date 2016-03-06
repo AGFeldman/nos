@@ -5,12 +5,7 @@
 #include <debug.h>
 #include "filesys/file.h"
 
-// A combination of page directory and user virtual address used as a hash
-// table key for the supplemental page table.
 struct spt_key {
-    // Page directory that the user virtual address is associated with
-    uint32_t *pd;
-
     // User virtual address, which we will use as the input to a hash function.
     // This address should be the start of a page. TODO(agf): Assert this
     // in the appropriate functions, such as spt_entry_hash() and
@@ -46,11 +41,7 @@ struct spt_entry {
     // TODO(agf): If the data is stored in swap, then we need info about that
 };
 
-void spt_lock_acquire(void);
-
-void spt_lock_release(void);
-
-void supp_page_table_init(void);
+void spt_init(struct hash *spt);
 
 unsigned spt_entry_hash(const struct hash_elem *e_, void *aux UNUSED);
 
@@ -59,8 +50,8 @@ bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
 
 struct spt_entry * spt_entry_insert(struct spt_entry *entry);
 
-struct spt_entry * spt_entry_allocate(uint32_t *, void *);
+struct spt_entry * spt_entry_allocate(void *);
 
-struct spt_entry * spt_entry_lookup(uint32_t *, void *);
+struct spt_entry * spt_entry_lookup(void *);
 
 #endif  // vm/page.h
