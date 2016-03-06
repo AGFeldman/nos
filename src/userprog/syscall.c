@@ -60,7 +60,9 @@ void check_pointer_validity(const void *p, struct intr_frame *f) {
         sys_exit_helper(-1);
     }
     bool user_stack = false;
-    if (p >= (void *)((uint8_t *) f->esp - 32)) {
+    // TODO(agf): Document max stack size of 2048 * PGSIZE
+    if (p >= (void *)((uint8_t *) f->esp - 32) &&
+            p >= PHYS_BASE - 2048 * PGSIZE) {
         user_stack = true;
         // TODO(agf): Updated this comment
         // We know that the pointer is in userspace, so if it is not any lower

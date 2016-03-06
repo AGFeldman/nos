@@ -564,6 +564,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
                               uint32_t read_bytes, uint32_t zero_bytes,
                               bool writable, uint32_t *pagedir) {
+    // spt_lock_acquire();
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
@@ -588,6 +589,7 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         upage += PGSIZE;
         ofs += page_read_bytes;
     }
+    // spt_lock_release();
     return true;
 }
 

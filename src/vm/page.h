@@ -46,6 +46,10 @@ struct spt_entry {
     // TODO(agf): If the data is stored in swap, then we need info about that
 };
 
+void spt_lock_acquire(void);
+
+void spt_lock_release(void);
+
 void supp_page_table_init(void);
 
 unsigned spt_entry_hash(const struct hash_elem *e_, void *aux UNUSED);

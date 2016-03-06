@@ -1,13 +1,23 @@
 #include "vm/page.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 
 static struct hash supp_page_table;
+static struct lock spt_lock;
 
+void spt_lock_acquire(void) {
+    lock_acquire(&spt_lock);
+}
+
+void spt_lock_release(void) {
+    lock_release(&spt_lock);
+}
 
 void supp_page_table_init(void) {
     hash_init(&supp_page_table, spt_entry_hash, spt_entry_less, NULL);
+    lock_init(&spt_lock);
 }
 
 // Returns a hash value for spt_entry e.

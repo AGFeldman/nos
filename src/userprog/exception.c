@@ -151,9 +151,11 @@ static void page_fault(struct intr_frame *f) {
         }
     }
 
-    // Grow the stack if the faulting address is a user address that
+    // Grow the stack if the faulting address is a user address that looks like
+    // a stack access.
     if (fault_addr != NULL && is_user_vaddr(fault_addr) &&
-        fault_addr >= (void *)((uint8_t *) f->esp - 32)) {
+        fault_addr >= (void *)((uint8_t *) f->esp - 32) &&
+        fault_addr >= PHYS_BASE - 2048 * PGSIZE) {
         if (allocate_and_install_blank_page(fault_addr)) {
             return;
         }
