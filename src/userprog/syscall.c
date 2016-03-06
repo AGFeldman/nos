@@ -21,8 +21,9 @@ static struct lock filesys_lock;
 static void syscall_handler(struct intr_frame *);
 
 void sys_halt(void);
-void check_pointer_validity(const void *p);
-void check_many_pointer_validity(const void *pmin, const void *pmax);
+void check_pointer_validity(const void *, struct intr_frame *);
+void check_many_pointer_validity(const void *, const void *,
+                                 struct intr_frame *);
 void sys_exit(struct intr_frame *f);
 void sys_exec(struct intr_frame *f);
 void sys_open(struct intr_frame *f);
@@ -54,28 +55,43 @@ void filesys_lock_release(void) {
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
-void check_pointer_validity(const void *p) {
+void check_pointer_validity(const void *p, struct intr_frame *f) {
     if (p == NULL || !is_user_vaddr(p)) {
         sys_exit_helper(-1);
     }
+    bool user_stack = false;
+    if (p >= (void *)((uint8_t *) f->esp - 32)) {
+        user_stack = true;
+        // TODO(agf): Updated this comment
+        // We know that the pointer is in userspace, so if it is not any lower
+        // than esp - 32 bytes, we assume that it is a stack access.
+        // This stack access might cause a page fault, which is fine; the page
+        // fault handler will grow the stack if needed.
+    }
     uint32_t *pd = thread_current()->pagedir;
     if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(pd, p) == NULL) {
+        if (user_stack) {
+            if (allocate_and_install_blank_page(p)) {
+                return;
+            }
+        }
         sys_exit_helper(-1);
     }
 }
 
 /* Exit with status -1 if p is an invalid user pointer, for any p with
    pmin <= p <= pmax. */
-void check_many_pointer_validity(const void *pmin, const void *pmax) {
+void check_many_pointer_validity(const void *pmin, const void *pmax,
+                                 struct intr_frame *f) {
     char * p;
     for (p = (char *)pmin; p < (char *)pmax; p += PAGE_SIZE_BYTES) {
-        check_pointer_validity(p);
+        check_pointer_validity(p, f);
     }
-    check_pointer_validity(pmax);
+    check_pointer_validity(pmax, f);
 }
 
 static void syscall_handler(struct intr_frame *f) {
-    check_pointer_validity(f->esp);
+    check_pointer_validity(f->esp, f);
     int syscall_num = *((int *) f->esp);
     if (syscall_num == SYS_HALT) {
         sys_halt();
@@ -124,7 +140,7 @@ void sys_exit_helper(int status) {
 
 void sys_exit(struct intr_frame *f) {
     int * status_p = (int *) f->esp + 1;
-    check_pointer_validity(status_p);
+    check_pointer_validity(status_p, f);
     int status = *status_p;
     f->eax = status;
     sys_exit_helper(status);
@@ -132,7 +148,7 @@ void sys_exit(struct intr_frame *f) {
 
 void sys_wait(struct intr_frame *f) {
     int * pid_p = (int *) f->esp + 1;
-    check_pointer_validity(pid_p);
+    check_pointer_validity(pid_p, f);
     int pid = *pid_p;
     int status = process_wait(pid);
     f->eax = status;
@@ -140,7 +156,7 @@ void sys_wait(struct intr_frame *f) {
 
 void sys_exec(struct intr_frame *f) {
     const char ** cmd_line_p = (const char **) f->esp + 1;
-    check_pointer_validity(cmd_line_p);
+    check_pointer_validity(cmd_line_p, f);
     tid_t tid = process_execute(*cmd_line_p);
     f->eax = tid;
     if (tid == TID_ERROR) {
@@ -155,7 +171,7 @@ void sys_open(struct intr_frame *f) {
         if (intr_trd->open_files[i] == NULL) {
             // char ** file_name_p = (char
             char * file_name = (char *) *((int *) f->esp + 1);
-            check_pointer_validity(file_name);
+            check_pointer_validity(file_name, f);
             filesys_lock_acquire();
             struct file * afile = filesys_open(file_name);
             filesys_lock_release();
@@ -174,7 +190,7 @@ void sys_open(struct intr_frame *f) {
 }
 
 void sys_close(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     int fd = *((int *) f->esp + 1);
     int open_files_index = fd - 2;
     if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
@@ -191,7 +207,7 @@ void sys_close(struct intr_frame *f) {
 }
 
 void sys_tell(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     int fd = *((int *) f->esp + 1);
     int open_files_index = fd - 2;
     if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
@@ -222,7 +238,10 @@ void sys_read(struct intr_frame *f) {
     int fd = *((int *) f->esp + 1);
     char * buf = (char *) *((int *) f->esp + 2);
     unsigned n = (unsigned) *((int *) f->esp + 3);
-    check_pointer_validity(buf);
+    // TODO(agf): Decide what to do here
+    // check_pointer_validity(buf, f);
+    // check_pointer_validity(buf + n - 1, f);
+    check_many_pointer_validity(buf, buf + n - 1, f);
     /* Read from console */
     if (fd == 0) {
         unsigned i;
@@ -251,13 +270,13 @@ void sys_read(struct intr_frame *f) {
 
 void sys_write(struct intr_frame *f) {
     int * fd_p = (int *) f->esp + 1;
-    check_pointer_validity(fd_p);
+    check_pointer_validity(fd_p, f);
     int fd = *fd_p;
     char ** buf_p = (char **) ((int *) f->esp + 2);
-    check_pointer_validity(buf_p);
+    check_pointer_validity(buf_p, f);
     char * buf = *buf_p;
     unsigned * n_p = (unsigned *) ((int *) f->esp + 3);
-    check_pointer_validity(n_p);
+    check_pointer_validity(n_p, f);
     unsigned n = *n_p;
 
     /* Write to console */
@@ -279,10 +298,10 @@ void sys_write(struct intr_frame *f) {
 
 void sys_create(struct intr_frame *f) {
     char ** file_p = (char **) ((int *) f->esp + 1);
-    check_pointer_validity(file_p);
+    check_pointer_validity(file_p, f);
     char * file = *file_p;
     unsigned int * initial_size_p = (unsigned int *) f->esp + 2;
-    check_pointer_validity(initial_size_p);
+    check_pointer_validity(initial_size_p, f);
     unsigned int initial_size = *initial_size_p;
     if (strlen(file) == 0) {
         f->eax = 0;
@@ -295,7 +314,7 @@ void sys_create(struct intr_frame *f) {
 }
 
 void sys_remove(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     char * file = *((char **) ((int *) f->esp + 1));
     filesys_lock_acquire();
     int success = filesys_remove(file);
@@ -304,9 +323,9 @@ void sys_remove(struct intr_frame *f) {
 }
 
 void sys_seek(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     int fd = *((int *) f->esp + 1);
-    check_pointer_validity((int *) f->esp + 2);
+    check_pointer_validity((int *) f->esp + 2, f);
     off_t position = (off_t) *((int *) f->esp + 2);
     struct thread *intr_trd = thread_current();
     struct file *afile = intr_trd->open_files[fd - 2];
