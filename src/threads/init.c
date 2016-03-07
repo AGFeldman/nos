@@ -23,6 +23,7 @@
 #include "threads/pte.h"
 #include "threads/thread.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 
 #ifdef USERPROG
 
@@ -68,7 +69,6 @@ static size_t user_page_limit = SIZE_MAX;
 
 static void bss_init(void);
 static void paging_init(void);
-static void vm_init(void);
 
 static char **read_command_line(void);
 static char **parse_options(char **argv);
@@ -106,7 +106,9 @@ int main(void) {
     palloc_init(user_page_limit);
     malloc_init();
     paging_init();
-    vm_init();
+
+    /* Initialize frame table. */
+    frame_table_init();
 
     /* Segmentation. */
 #ifdef USERPROG
@@ -135,6 +137,9 @@ int main(void) {
     locate_block_devices();
     filesys_init(format_filesys);
 #endif
+
+    /* Initialize swap table. */
+    swap_init();
 
     printf("Boot complete.\n");
 
@@ -189,11 +194,6 @@ static void paging_init(void) {
        to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
        of the Page Directory". */
     asm volatile ("movl %0, %%cr3" : : "r" (vtop (init_page_dir)));
-}
-
-/*! Sets up data structures needed for virtual memory. */
-static void vm_init(void) {
-    frame_table_init();
 }
 
 /*! Breaks the kernel command line into words and returns them as
