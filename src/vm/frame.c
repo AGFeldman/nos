@@ -1,8 +1,10 @@
 #include "vm/frame.h"
+#include "vm/swap.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "random.h"
 
 
 // The address where the frame table begins
@@ -63,4 +65,17 @@ void ft_deinit_entries(void *kpage, size_t page_cnt) {
         ft_deinit_entry((void *)(cur_kpage));
         cur_kpage += PGSIZE;
     }
+}
+
+// Find a physical page, write its contents to swap, and return its kernel
+// virtual address
+void * frame_evict(void) {
+    unsigned long framenum = random_ulong() % NUM_USER_FRAMES;
+    while (frame_table[framenum].kernel_vaddr == NULL) {
+        framenum = random_ulong() % NUM_USER_FRAMES;
+    }
+    ASSERT(frame_table[framenum].user_vaddr != NULL);
+    swap_dump_ft_entry(frame_table + framenum);
+    frame_table[framenum].user_vaddr = NULL;
+    return frame_table[framenum].kernel_vaddr;
 }

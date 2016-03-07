@@ -68,21 +68,25 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
     lock_release(&pool->lock);
 
-    if (page_idx != BITMAP_ERROR)
+    if (page_idx != BITMAP_ERROR) {
         pages = pool->base + PGSIZE * page_idx;
-    else
-        pages = NULL;
+    }
+    else {
+        if (flags & PAL_USER) {
+            pages = frame_evict();
+            ASSERT(pages != NULL);
+        }
+        else if (flags & PAL_ASSERT) {
+            PANIC("palloc_get: out of pages");
+        }
+        else {
+            pages = NULL;
+        }
+    }
 
     if (pages != NULL) {
         if (flags & PAL_ZERO)
             memset(pages, 0, PGSIZE * page_cnt);
-    }
-    else {
-        if (flags & PAL_ASSERT)
-            PANIC("palloc_get: out of pages");
-        // TODO(agf): Remove this when we support eviction
-        if (flags & PAL_USER)
-            PANIC("palloc_get: out of pages 2");
     }
 
     if (flags & PAL_USER) {

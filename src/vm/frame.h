@@ -32,4 +32,6 @@ void ft_deinit_entry(void *);
 
 void ft_deinit_entries(void *, size_t);
 
+void * frame_evict(void);
+
 #endif  // vm/frame.h

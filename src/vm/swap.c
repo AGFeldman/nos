@@ -6,8 +6,8 @@
 
 
 static struct block * swap_block;
-static unsigned int sectors_needed_for_a_page;
-static unsigned int num_swap_pages;
+static int sectors_needed_for_a_page;
+static int num_swap_pages;
 static struct swapt_entry * swapt;
 
 void swap_init(void) {
@@ -18,7 +18,7 @@ void swap_init(void) {
     }
     num_swap_pages = block_size(swap_block) / sectors_needed_for_a_page;
     swapt = malloc(num_swap_pages * sizeof(struct swapt_entry));
-    unsigned int i;
+    int i;
     for (i = 0; i < num_swap_pages; i++) {
         swapt[i].uaddr = NULL;
     }
@@ -26,10 +26,10 @@ void swap_init(void) {
 }
 
 // Write a page from buffer into swap.
-void swap_write_page(unsigned int swap_page_number, const char *buffer) {
+void swap_write_page(int swap_page_number, const char *buffer) {
     ASSERT(swap_page_number < num_swap_pages);
     block_sector_t sector = swap_page_number * sectors_needed_for_a_page;
-    unsigned int i;
+    int i;
     for (i = 0; i < sectors_needed_for_a_page; i++) {
         block_write(swap_block, sector, buffer);
         sector++;
@@ -38,13 +38,40 @@ void swap_write_page(unsigned int swap_page_number, const char *buffer) {
 }
 
 // Read a page from swap into buffer
-void swap_read_page(unsigned int swap_page_number, char *buffer) {
+void swap_read_page(int swap_page_number, char *buffer) {
     ASSERT(swap_page_number < num_swap_pages);
     block_sector_t sector = swap_page_number * sectors_needed_for_a_page;
-    unsigned int i;
+    int i;
     for (i = 0; i < sectors_needed_for_a_page; i++) {
         block_read(swap_block, sector, buffer);
         sector++;
         buffer += BLOCK_SECTOR_SIZE;
     }
+}
+
+// Returns a free swap slot number, or -1 if there are no free slots
+int swap_find_free_slot(void) {
+    int i;
+    for (i = 0; i < num_swap_pages; i++) {
+        if (swapt[i].uaddr == NULL) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void mark_slot_unused(int swap_num) {
+    swapt[swap_num].uaddr = NULL;
+}
+
+// TODO(agf): Might need a synchronized function that finds a free slot and
+// writes to it
+
+void swap_dump_ft_entry(struct ft_entry * f) {
+    int swap_slot = swap_find_free_slot();
+    ASSERT(f->user_vaddr != NULL);
+    swap_write_page(swap_slot, f->user_vaddr);
+    swapt[swap_slot].kaddr = f->kernel_vaddr;
+    swapt[swap_slot].uaddr = f->user_vaddr;
+    // TODO(agf): Update SPT
 }
