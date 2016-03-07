@@ -48,10 +48,10 @@ unsigned spt_entry_hash(const struct hash_elem *e_, void *aux UNUSED);
 bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
                     void *aux UNUSED);
 
-struct spt_entry * spt_entry_insert(struct spt_entry *entry);
+struct spt_entry * spt_entry_insert(struct spt_entry *, struct hash *);
 
-struct spt_entry * spt_entry_allocate(void *);
+struct spt_entry * spt_entry_allocate(void *, struct hash *);
 
-struct spt_entry * spt_entry_lookup(void *);
+struct spt_entry * spt_entry_lookup(void *, struct hash *);
 
 #endif  // vm/page.h

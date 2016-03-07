@@ -21,9 +21,8 @@ static struct lock filesys_lock;
 static void syscall_handler(struct intr_frame *);
 
 void sys_halt(void);
-void check_pointer_validity(const void *, struct intr_frame *);
-void check_many_pointer_validity(const void *, const void *,
-                                 struct intr_frame *);
+void check_pointer_validity(void *, struct intr_frame *);
+void check_many_pointer_validity(void *, void *, struct intr_frame *);
 void sys_exit(struct intr_frame *f);
 void sys_exec(struct intr_frame *f);
 void sys_open(struct intr_frame *f);
@@ -55,7 +54,7 @@ void filesys_lock_release(void) {
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
-void check_pointer_validity(const void *p, struct intr_frame *f) {
+void check_pointer_validity(void *p, struct intr_frame *f) {
     if (p == NULL || !is_user_vaddr(p)) {
         sys_exit_helper(-1);
     }
@@ -71,7 +70,7 @@ void check_pointer_validity(const void *p, struct intr_frame *f) {
         // fault handler will grow the stack if needed.
     }
     uint32_t *pd = thread_current()->pagedir;
-    if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(p) == NULL) {
+    if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(p, NULL) == NULL) {
         if (user_stack) {
             if (allocate_and_install_blank_page(p)) {
                 return;
@@ -83,7 +82,7 @@ void check_pointer_validity(const void *p, struct intr_frame *f) {
 
 /* Exit with status -1 if p is an invalid user pointer, for any p with
    pmin <= p <= pmax. */
-void check_many_pointer_validity(const void *pmin, const void *pmax,
+void check_many_pointer_validity(void *pmin, void *pmax,
                                  struct intr_frame *f) {
     char * p;
     for (p = (char *)pmin; p < (char *)pmax; p += PAGE_SIZE_BYTES) {

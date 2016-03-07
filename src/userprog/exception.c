@@ -116,7 +116,8 @@ static void kill(struct intr_frame *f) {
 static void page_fault(struct intr_frame *f) {
     bool not_present;  /* True: not-present page, false: writing r/o page. */
     bool write;        /* True: access was write, false: access was read. */
-    bool user;         /* True: access by user, false: access by kernel. */
+    // TODO(agf)
+    // bool user;         /* True: access by user, false: access by kernel. */
     void *fault_addr;  /* Fault address. */
 
     /* Obtain faulting address, the virtual address that was accessed to cause
@@ -136,11 +137,12 @@ static void page_fault(struct intr_frame *f) {
     /* Determine cause. */
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
-    user = (f->error_code & PF_U) != 0;
+    // TODO(agf)
+    // user = (f->error_code & PF_U) != 0;
 
     // Load from Supplemental Page Table, if possible
     if (not_present) {
-        struct spt_entry * spte = spt_entry_lookup(fault_addr);
+        struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
         if (spte != NULL &&
             (!write || spte->writable) &&
             load_page_from_spte(spte)) {
