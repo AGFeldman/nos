@@ -21,6 +21,12 @@ struct ft_entry {
     struct lock lock;
 };
 
+bool vm_lock_held(void);
+
+void vm_lock_acquire(void);
+
+void vm_lock_release(void);
+
 void frame_table_init(void);
 
 struct ft_entry * ft_lookup(void *);

@@ -564,7 +564,9 @@ bool load_page_from_spte(struct spt_entry *spte) {
         filesys_lock_release();
     }
     // Get a page of memory
+    printf("Thread %p load_page_from_spte about to palloc_get\n", thread_current());
     uint8_t *kpage = palloc_get_page(PAL_USER);
+    printf("Thread %p load_page_from_spte finished palloc_get\n", thread_current());
     if (kpage == NULL) {
         return false;
     }
