@@ -12,8 +12,8 @@ void spt_init(struct hash *spt) {
 
 // Returns a hash value for spt_entry e.
 unsigned spt_entry_hash(const struct hash_elem *e_, void *aux UNUSED) {
-    // TODO(agf): Either assert that they key is page-aligned
     const struct spt_entry *e = hash_entry(e_, struct spt_entry, hash_elem);
+    ASSERT(pg_round_down(e->key.addr) == e->key.addr);
     return hash_bytes(&e->key, sizeof e->key);
 }
 
