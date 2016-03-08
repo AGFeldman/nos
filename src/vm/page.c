@@ -10,7 +10,7 @@ void spt_init(struct hash *spt) {
 }
 
 // TODO(agf): Note that functions that use this can take a null spt argument
-static inline struct hash * get_spt(struct hash * spt) {
+inline struct hash * get_spt(struct hash * spt) {
     return spt == NULL ? &thread_current()->spt : spt;
 }
 
@@ -46,7 +46,7 @@ struct spt_entry * spt_entry_insert(struct spt_entry *entry,
 // Should only be called from the kernel, since this uses kernel malloc().
 // Returns the address of the newly allocated spt_entry, or NULL if the table
 // already had an entry with that combination of page directory and address.
-struct spt_entry * spt_entry_allocate(void *address, struct hash * spt) {
+struct spt_entry * spt_entry_allocate(void * address, struct hash * spt) {
     spt = get_spt(spt);
     struct spt_entry * entry = (struct spt_entry *) malloc(sizeof(
                                                            struct spt_entry));
@@ -54,6 +54,7 @@ struct spt_entry * spt_entry_allocate(void *address, struct hash * spt) {
 
     // It is important that some fields be initialized
     entry->file = NULL;
+    entry->swap_page_number = -1;
 
     struct spt_entry * result = spt_entry_insert(entry, spt);
     if (result == NULL) {
@@ -64,6 +65,30 @@ struct spt_entry * spt_entry_allocate(void *address, struct hash * spt) {
     // key
     free((void *) entry);
     return NULL;
+}
+
+// Returns an spt_entry from a hash table. If there is not yet an entry in
+// |spt| with user virtual address |address|, then allocate memory for a new
+// spt_entry, insert it into the hash table, and return a pointer to it.
+// See also spt_entry_allocate() and spt_entry_lookup().
+// TODO(agf): Combine this with spt_entry_allocate().
+struct spt_entry * spt_entry_get_or_create(void * address, struct hash * spt) {
+    spt = get_spt(spt);
+    struct spt_entry * entry = (struct spt_entry *) malloc(sizeof(
+                                                           struct spt_entry));
+    entry->key.addr = pg_round_down(address);
+
+    // It is important that some fields be initialized
+    entry->file = NULL;
+    entry->swap_page_number = -1;
+
+    struct spt_entry * result = spt_entry_insert(entry, spt);
+    if (result == NULL) {
+        return entry;
+    }
+    // The table already had an entry with the same key
+    free((void *) entry);
+    return result;
 }
 
 // Returns the supplemental page table entry for the given combination of

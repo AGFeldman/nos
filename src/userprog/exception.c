@@ -8,6 +8,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
@@ -143,12 +144,21 @@ static void page_fault(struct intr_frame *f) {
     // Load from Supplemental Page Table, if possible
     if (not_present) {
         struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
-        if (spte != NULL &&
-            (!write || spte->writable) &&
-            load_page_from_spte(spte)) {
-            // We weren't trying to write to a read-only page, and we
-            // successfully loaded that page into memory from file
-            return;
+        if (spte != NULL) {
+            if (spte->file != NULL && (!write || spte->writable) &&
+                load_page_from_spte(spte)) {
+                // We were trying to read from an executable file.
+                // We weren't trying to write to a read-only page, and we
+                // successfully loaded that page into memory from file.
+                // TODO(agf): load_page_from_spte() will only work the first
+                // time that an executable page gets loaded.
+                return;
+            }
+            if (spte->swap_page_number != -1) {
+                // TODO(agf): Don't block on disk from the page-fault handler!
+                swap_read_page(spte->swap_page_number, spte->key.addr);
+                return;
+            }
         }
     }
 

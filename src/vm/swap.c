@@ -1,4 +1,5 @@
 #include "vm/swap.h"
+#include "vm/page.h"
 #include "devices/block.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
@@ -26,8 +27,10 @@ void swap_init(void) {
 }
 
 // Write a page from buffer into swap.
+// buffer must be page-aligned.
 void swap_write_page(int swap_page_number, const char *buffer) {
     ASSERT(swap_page_number < num_swap_pages);
+    ASSERT(pg_round_down(buffer) == buffer);
     block_sector_t sector = swap_page_number * sectors_needed_for_a_page;
     int i;
     for (i = 0; i < sectors_needed_for_a_page; i++) {
@@ -37,9 +40,11 @@ void swap_write_page(int swap_page_number, const char *buffer) {
     }
 }
 
-// Read a page from swap into buffer
+// Read a page from swap into buffer.
+// Buffer is rounded down to the nearest page boundary.
 void swap_read_page(int swap_page_number, char *buffer) {
     ASSERT(swap_page_number < num_swap_pages);
+    buffer = pg_round_down(buffer);
     block_sector_t sector = swap_page_number * sectors_needed_for_a_page;
     int i;
     for (i = 0; i < sectors_needed_for_a_page; i++) {
@@ -70,8 +75,14 @@ void mark_slot_unused(int swap_num) {
 void swap_dump_ft_entry(struct ft_entry * f) {
     int swap_slot = swap_find_free_slot();
     ASSERT(f->user_vaddr != NULL);
+    ASSERT(f->spt != NULL);
     swap_write_page(swap_slot, f->user_vaddr);
     swapt[swap_slot].kaddr = f->kernel_vaddr;
     swapt[swap_slot].uaddr = f->user_vaddr;
-    // TODO(agf): Update SPT
+    struct spt_entry * spte = spt_entry_get_or_create(f->user_vaddr, f->spt);
+    // TODO(agf): If the frame is from a read-only part of an executable file,
+    // we shouldn't use swap, because we can just read back from the
+    // executable.
+    spte->swap_page_number = swap_slot;
+    spte->file = NULL;
 }

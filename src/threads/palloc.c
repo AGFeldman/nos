@@ -85,12 +85,12 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     }
 
     if (pages != NULL) {
-        if (flags & PAL_ZERO)
+        if (flags & PAL_ZERO) {
             memset(pages, 0, PGSIZE * page_cnt);
-    }
-
-    if (flags & PAL_USER) {
-        ft_init_entries(pages, page_cnt);
+        }
+        if (flags & PAL_USER) {
+            ft_init_entries(pages, page_cnt);
+        }
     }
 
     return pages;
@@ -164,6 +164,7 @@ static void init_pool(struct pool *p, void *base, size_t page_cnt,
 
 /*! Returns true if PAGE was allocated from POOL, false otherwise. */
 bool page_from_pool(const struct pool *pool, void *page) {
+    ASSERT(pool == &user_pool || pool == &kernel_pool);
     size_t page_no = pg_no(page);
     size_t start_page = pg_no(pool->base);
     size_t end_page = start_page + bitmap_size(pool->used_map);

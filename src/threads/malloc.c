@@ -125,7 +125,7 @@ void * malloc(size_t size) {
         a = palloc_get_page(0);
         if (a == NULL) {
             lock_release(&d->lock);
-            return NULL; 
+            return NULL;
         }
 
         /* Initialize arena and add its blocks to the free list. */

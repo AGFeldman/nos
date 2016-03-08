@@ -1,6 +1,7 @@
 #ifndef VM_FRAME_H
 #define VM_FRAME_H
 
+#include <hash.h>
 #include "threads/synch.h"
 #include "threads/loader.h"
 
@@ -14,6 +15,8 @@ struct ft_entry {
     void * kernel_vaddr;
     // User virtual address (if any) of the page that occupies this frame
     void * user_vaddr;
+    // Supplemental page table for this page's user thread
+    struct hash * spt;
     int age;
     struct lock lock;
 };
@@ -22,7 +25,7 @@ void frame_table_init(void);
 
 struct ft_entry * ft_lookup(void *);
 
-void ft_add_user_mapping(void *, void *);
+void ft_add_user_mapping(void *, void *, struct hash *);
 
 void ft_init_entry(void *);
 

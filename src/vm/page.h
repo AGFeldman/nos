@@ -38,10 +38,13 @@ struct spt_entry {
     size_t file_read_bytes;
     bool writable;
 
-    // TODO(agf): If the data is stored in swap, then we need info about that
+    // Fields used for loading from swap files
+    int swap_page_number;
 };
 
 void spt_init(struct hash *spt);
+
+inline struct hash * get_spt(struct hash * spt);
 
 unsigned spt_entry_hash(const struct hash_elem *e_, void *aux UNUSED);
 
@@ -51,6 +54,8 @@ bool spt_entry_less(const struct hash_elem *a_, const struct hash_elem *b_,
 struct spt_entry * spt_entry_insert(struct spt_entry *, struct hash *);
 
 struct spt_entry * spt_entry_allocate(void *, struct hash *);
+
+struct spt_entry * spt_entry_get_or_create(void *, struct hash *);
 
 struct spt_entry * spt_entry_lookup(void *, struct hash *);
 

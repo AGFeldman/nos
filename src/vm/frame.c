@@ -1,4 +1,5 @@
 #include "vm/frame.h"
+#include "vm/page.h"
 #include "vm/swap.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
@@ -29,15 +30,20 @@ struct ft_entry * ft_lookup(void *kernel_vaddr) {
     return frame_table + (pg_no(kernel_vaddr) - user_pool_base_pg_no);
 }
 
-void ft_add_user_mapping(void *upage, void *kpage) {
-    ft_lookup(kpage)->user_vaddr = upage;
+void ft_add_user_mapping(void *upage, void *kpage, struct hash * spt) {
+    spt = get_spt(spt);
+    struct ft_entry * entry = ft_lookup(kpage);
+    entry->user_vaddr = upage;
+    entry->spt = spt;
 }
 
 void ft_init_entry(void *kpage) {
     // TODO(agf): Assert page offset is zero, and it is a kernel page, etc.
+    ASSERT(pg_round_down(kpage) == kpage);
     struct ft_entry * entry = ft_lookup(kpage);
     entry->kernel_vaddr = kpage;
     entry->user_vaddr = NULL;
+    entry->spt = NULL;
     entry->age = 0;
     lock_init(&entry->lock);
 }
@@ -74,8 +80,10 @@ void * frame_evict(void) {
     while (frame_table[framenum].kernel_vaddr == NULL) {
         framenum = random_ulong() % NUM_USER_FRAMES;
     }
+    ASSERT(page_from_pool(user_pool, frame_table[framenum].kernel_vaddr));
     ASSERT(frame_table[framenum].user_vaddr != NULL);
     swap_dump_ft_entry(frame_table + framenum);
     frame_table[framenum].user_vaddr = NULL;
+    frame_table[framenum].spt = NULL;
     return frame_table[framenum].kernel_vaddr;
 }

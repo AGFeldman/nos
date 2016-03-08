@@ -573,6 +573,8 @@ bool load_page_from_spte(struct spt_entry *spte) {
         if (!already_held) {
             filesys_lock_acquire();
         }
+        // TODO(agf): To address aliasing, might want to do this access
+        // through upage instead of kpage.
         if (file_read(spte->file, kpage, spte->file_read_bytes) !=
                 (int) spte->file_read_bytes) {
             if (!already_held) {
