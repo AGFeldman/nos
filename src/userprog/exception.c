@@ -4,8 +4,10 @@
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
 #include "vm/swap.h"
@@ -145,6 +147,8 @@ static void page_fault(struct intr_frame *f) {
     if (not_present) {
         struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
         if (spte != NULL) {
+            ASSERT(spte->key.addr == pg_round_down(fault_addr));
+            ASSERT(spte->trd == thread_current());
             if (spte->file != NULL && (!write || spte->writable) &&
                 load_page_from_spte(spte)) {
                 // We were trying to read from an executable file.
@@ -152,11 +156,23 @@ static void page_fault(struct intr_frame *f) {
                 // successfully loaded that page into memory from file.
                 // TODO(agf): load_page_from_spte() will only work the first
                 // time that an executable page gets loaded.
+                // TODO(agf): Rename load_page_from_spte() to indicate that
+                // it is only for executables.
                 return;
             }
             if (spte->swap_page_number != -1) {
-                // TODO(agf): Don't block on disk from the page-fault handler!
+                // Obtain a free page and map it into memory.
+                // pagedir_set_page() updates the frame table entry.
+                uint8_t *kpage = palloc_get_page(PAL_USER);
+                // TODO(agf): Make the page read-only if needed
+                bool result = pagedir_set_page(spte->trd->pagedir,
+                                               spte->key.addr, kpage, true);
+                ASSERT(result == true);
+                // Read page from swap
                 swap_read_page(spte->swap_page_number, spte->key.addr);
+                // Free the swap slot
+                mark_slot_unused(spte->swap_page_number);
+                // TODO(agf): Update the SPT entry?
                 return;
             }
         }

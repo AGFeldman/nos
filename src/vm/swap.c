@@ -72,17 +72,19 @@ void mark_slot_unused(int swap_num) {
 // TODO(agf): Might need a synchronized function that finds a free slot and
 // writes to it
 
-void swap_dump_ft_entry(struct ft_entry * f) {
-    int swap_slot = swap_find_free_slot();
+// Write a frame table entry to an empty swap slot, and return the number of
+// the swap slot.
+// If there are no free swap slots, then do not perform any writing, and return
+// -1.
+int swap_dump_ft_entry(struct ft_entry * f) {
     ASSERT(f->user_vaddr != NULL);
-    ASSERT(f->spt != NULL);
+    ASSERT(f->trd != NULL);
+    int swap_slot = swap_find_free_slot();
+    if (swap_slot == -1) {
+        return swap_slot;
+    }
     swap_write_page(swap_slot, f->user_vaddr);
     swapt[swap_slot].kaddr = f->kernel_vaddr;
     swapt[swap_slot].uaddr = f->user_vaddr;
-    struct spt_entry * spte = spt_entry_get_or_create(f->user_vaddr, f->spt);
-    // TODO(agf): If the frame is from a read-only part of an executable file,
-    // we shouldn't use swap, because we can just read back from the
-    // executable.
-    spte->swap_page_number = swap_slot;
-    spte->file = NULL;
+    return swap_slot;
 }

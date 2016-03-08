@@ -20,6 +20,6 @@ int swap_find_free_slot(void);
 
 void mark_slot_unused(int);
 
-void swap_dump_ft_entry(struct ft_entry *);
+int swap_dump_ft_entry(struct ft_entry *);
 
 #endif  // vm/swap.h
