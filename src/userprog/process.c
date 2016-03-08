@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -527,12 +528,14 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         // TODO(agf): Free this later
+        vm_lock_acquire();
         struct spt_entry * spte = spt_entry_allocate(upage, NULL);
         ASSERT(spte != NULL);
         spte->file = file;
         spte->file_ofs = ofs;
         spte->file_read_bytes = page_read_bytes;
         spte->writable = writable;
+        vm_lock_release();
 
         // Advance
         read_bytes -= page_read_bytes;
@@ -564,9 +567,7 @@ bool load_page_from_spte(struct spt_entry *spte) {
         filesys_lock_release();
     }
     // Get a page of memory
-    printf("Thread %p load_page_from_spte about to palloc_get\n", thread_current());
     uint8_t *kpage = palloc_get_page(PAL_USER);
-    printf("Thread %p load_page_from_spte finished palloc_get\n", thread_current());
     if (kpage == NULL) {
         return false;
     }

@@ -1,4 +1,5 @@
 #include "vm/page.h"
+#include "vm/frame.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
@@ -44,6 +45,10 @@ struct spt_entry * spt_entry_insert(struct spt_entry *entry,
 // Returns the address of the newly allocated spt_entry, or NULL if the table
 // already had an entry with that combination of page directory and address.
 struct spt_entry * spt_entry_allocate(void * address, struct thread * trd) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     if (trd == NULL) {
         trd = thread_current();
     }
@@ -59,11 +64,17 @@ struct spt_entry * spt_entry_allocate(void * address, struct thread * trd) {
     struct spt_entry * result = spt_entry_insert(entry, &trd->spt);
     if (result == NULL) {
         // Successfully inserted
+        if (!already_held) {
+            vm_lock_release();
+        }
         return entry;
     }
     // Insertion failed because the table already had an entry with the same
     // key
     free((void *) entry);
+    if (!already_held) {
+        vm_lock_release();
+    }
     return NULL;
 }
 
@@ -74,6 +85,10 @@ struct spt_entry * spt_entry_allocate(void * address, struct thread * trd) {
 // TODO(agf): Combine this with spt_entry_allocate().
 struct spt_entry * spt_entry_get_or_create(void * address,
                                            struct thread * trd) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     if (trd == NULL) {
         trd = thread_current();
     }
@@ -88,10 +103,16 @@ struct spt_entry * spt_entry_get_or_create(void * address,
 
     struct spt_entry * result = spt_entry_insert(entry, &trd->spt);
     if (result == NULL) {
+        if (!already_held) {
+            vm_lock_release();
+        }
         return entry;
     }
     // The table already had an entry with the same key
     free((void *) entry);
+    if (!already_held) {
+        vm_lock_release();
+    }
     return result;
 }
 
@@ -99,6 +120,10 @@ struct spt_entry * spt_entry_get_or_create(void * address,
 // page directory and virtual address.
 // Returns NULL if key not found.
 struct spt_entry * spt_entry_lookup(void *address, struct hash * spt) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     if (spt == NULL) {
         spt = &thread_current()->spt;
     }
@@ -108,5 +133,8 @@ struct spt_entry * spt_entry_lookup(void *address, struct hash * spt) {
 
     entry.key.addr = pg_round_down(address);
     elem = hash_find(spt, &entry.hash_elem);
+    if (!already_held) {
+        vm_lock_release();
+    }
     return elem != NULL ? hash_entry(elem, struct spt_entry, hash_elem) : NULL;
 }

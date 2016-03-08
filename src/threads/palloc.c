@@ -64,22 +64,16 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     if (page_cnt == 0)
         return NULL;
 
-    // printf("Thread %p about to acquire pool lock\n", thread_current());
     lock_acquire(&pool->lock);
-    // printf("Thread %p acquired pool lock\n", thread_current());
     page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
-    // printf("Thread %p about to release pool lock\n", thread_current());
     lock_release(&pool->lock);
-    // printf("Thread %p released pool lock\n", thread_current());
 
     if (page_idx != BITMAP_ERROR) {
         pages = pool->base + PGSIZE * page_idx;
     }
     else {
         if (flags & PAL_USER) {
-            printf("Thread %p about to frame evict\n", thread_current());
             pages = frame_evict();
-            printf("Thread %p finished frame evicting\n", thread_current());
             ASSERT(pages != NULL);
         }
         else if (flags & PAL_ASSERT) {

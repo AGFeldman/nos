@@ -2,7 +2,6 @@
 #include "vm/page.h"
 #include "vm/swap.h"
 #include "userprog/pagedir.h"
-#include "userprog/syscall.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
@@ -48,12 +47,19 @@ struct ft_entry * ft_lookup(void *kernel_vaddr) {
 }
 
 void ft_add_user_mapping(void *upage, void *kpage, struct thread * trd) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     if (trd == NULL) {
         trd = thread_current();
     }
     struct ft_entry * entry = ft_lookup(kpage);
     entry->user_vaddr = upage;
     entry->trd = trd;
+    if (!already_held) {
+        vm_lock_release();
+    }
 }
 
 void ft_init_entry(void *kpage) {
@@ -68,11 +74,18 @@ void ft_init_entry(void *kpage) {
 }
 
 void ft_init_entries(void *kpage, size_t page_cnt) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     uint8_t * cur_kpage = (uint8_t *) kpage;
     size_t i;
     for (i = 0; i < page_cnt; i++) {
         ft_init_entry((void *)(cur_kpage));
         cur_kpage += PGSIZE;
+    }
+    if (!already_held) {
+        vm_lock_release();
     }
 }
 
@@ -85,45 +98,47 @@ void ft_deinit_entry(void *kpage) {
 }
 
 void ft_deinit_entries(void *kpage, size_t page_cnt) {
+    bool already_held = vm_lock_held();
+    if (!already_held) {
+        vm_lock_acquire();
+    }
     uint8_t * cur_kpage = (uint8_t *) kpage;
     size_t i;
     for (i = 0; i < page_cnt; i++) {
         ft_deinit_entry((void *)(cur_kpage));
         cur_kpage += PGSIZE;
     }
+    if (!already_held) {
+        vm_lock_release();
+    }
 }
 
 // Find a physical page, write its contents to swap, and return its kernel
 // virtual address
 void * frame_evict(void) {
-    printf("Thread %p frame_evict 1\n", thread_current());
     bool already_held = vm_lock_held();
     if (!already_held) {
         vm_lock_acquire();
     }
     unsigned long framenum = random_ulong() % NUM_USER_FRAMES;
     struct ft_entry * fte = frame_table + framenum;
-    printf("Thread %p frame_evict 2\n", thread_current());
-    while (fte->kernel_vaddr == NULL || fte->user_vaddr == NULL) {
+    while (fte->kernel_vaddr == NULL || fte->user_vaddr == NULL
+           || fte->trd->pagedir == NULL) {
+        // TODO(agf): Why do I need the condition above?
         // TODO(agf): It should be the case that kernel_vadr != NULL =>
         // user_vaddr != NULL, but it isn't.
         framenum = random_ulong() % NUM_USER_FRAMES;
         fte = frame_table + framenum;
     }
-    printf("Thread %p frame_evict 3\n", thread_current());
     ASSERT(page_from_pool(user_pool, fte->kernel_vaddr));
 
     struct spt_entry * spte = spt_entry_get_or_create(fte->user_vaddr,
                                                       fte->trd);
-    printf("Thread %p frame_evict 4\n", thread_current());
 
     // TODO(agf): If the frame is from a read-only part of an executable file,
     // we shouldn't use swap, because we can just read back from the
     // executable.
     int swap_slot = swap_dump_ft_entry(fte);
-
-    printf("Thread %p frame_evict 5\n", thread_current());
-
     ASSERT(swap_slot != -1);
     // Update SPT
     spte->trd = fte->trd;
@@ -131,9 +146,9 @@ void * frame_evict(void) {
     spte->file = NULL;
 
     // Unmap the page from user space
+    ASSERT(fte->trd->pagedir != NULL);
     pagedir_clear_page(fte->trd->pagedir, fte->user_vaddr);
 
-    printf("Thread %p frame_evict 6\n", thread_current());
     void * kernel_vaddr = fte->kernel_vaddr;
     // TODO(agf): Could assert that kernel_vaddr matches up with framenum
     fte->kernel_vaddr = NULL;
@@ -143,6 +158,5 @@ void * frame_evict(void) {
         vm_lock_release();
     }
 
-    printf("Thread %p frame_evict 7\n", thread_current());
     return kernel_vaddr;
 }

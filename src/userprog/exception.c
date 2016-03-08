@@ -145,17 +145,15 @@ static void page_fault(struct intr_frame *f) {
 
     // Load from Supplemental Page Table, if possible
     if (not_present) {
+        vm_lock_acquire();
         struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
         if (spte != NULL) {
             // TODO(agf): I sort of want to acquire a VM lock here
             // But interrupt handlers should not wait on locks :(
             // Instead, pinning something might provide the answer...
-            vm_lock_acquire();
-            printf("Thread %p starting spte...\n", thread_current());
             ASSERT(spte->key.addr == pg_round_down(fault_addr));
             ASSERT(spte->trd == thread_current());
             if (spte->file != NULL && (!write || spte->writable)) {
-                printf("Thread %p will load executable...\n", thread_current());
                 // We were trying to read from an executable file.
                 // We weren't trying to write to a read-only page, and we
                 // successfully loaded that page into memory from file.
@@ -164,19 +162,16 @@ static void page_fault(struct intr_frame *f) {
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
                 if (load_page_from_spte(spte)) {
-                    printf("Thread %p ending spte...\n", thread_current());
                     vm_lock_release();
                     return;
                 }
-                printf("Thread %p failed at loading executable...\n", thread_current());
             }
             if (spte->swap_page_number != -1) {
-                printf("Thread %p will load from swap...\n", thread_current());
                 // Obtain a free page and map it into memory.
                 // pagedir_set_page() updates the frame table entry.
                 uint8_t *kpage = palloc_get_page(PAL_USER);
-                printf("Thread %p will load from swap2...\n", thread_current());
                 // TODO(agf): Make the page read-only if needed
+                ASSERT(spte->trd->pagedir != NULL);
                 bool result = pagedir_set_page(spte->trd->pagedir,
                                                spte->key.addr, kpage, true);
                 ASSERT(result == true);
@@ -185,13 +180,11 @@ static void page_fault(struct intr_frame *f) {
                 // Free the swap slot
                 mark_slot_unused(spte->swap_page_number);
                 // TODO(agf): Update the SPT entry?
-                printf("Thread %p ending spte...\n", thread_current());
                 vm_lock_release();
                 return;
             }
-            printf("Thread %p ending spte...\n", thread_current());
-            vm_lock_release();
         }
+        vm_lock_release();
     }
 
     // Grow the stack if the faulting address is a user address that looks like

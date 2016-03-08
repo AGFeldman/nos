@@ -115,7 +115,6 @@ void * malloc(size_t size) {
         return a + 1;
     }
 
-    if (!lock_held_by_current_thread(&d->lock))
     lock_acquire(&d->lock);
 
     /* If the free list is empty, create a new arena. */
@@ -216,8 +215,6 @@ void free(void *p) {
             memset(b, 0xcc, d->block_size);
 #endif
 
-    // TODO(agf)
-    if (!lock_held_by_current_thread(&d->lock))
             lock_acquire(&d->lock);
 
             /* Add block to free list. */
