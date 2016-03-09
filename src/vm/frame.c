@@ -1,4 +1,5 @@
 #include <bitmap.h>
+#include <stdio.h>
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/swap.h"
@@ -37,11 +38,15 @@ bool eviction_lock_held(void) {
 }
 
 void eviction_lock_acquire(void) {
+    printf("AGF: Thread %p trying to acquire eviction lock\n", thread_current());
     lock_acquire(&eviction_lock);
+    printf("AGF: Thread %p acquired eviction lock\n", thread_current());
 }
 
 void eviction_lock_release(void) {
+    printf("AGF: Thread %p trying to release eviction lock\n", thread_current());
     lock_release(&eviction_lock);
+    printf("AGF: Thread %p released eviction lock\n", thread_current());
 }
 
 void frame_table_init(void) {
@@ -72,6 +77,7 @@ struct ft_entry * ft_lookup(void *kernel_vaddr) {
 }
 
 void ft_add_user_mapping(void *upage, void *kpage, struct thread * trd) {
+    printf("AGF: Thread %p adding user mapping\n", thread_current());
     if (trd == NULL) {
         trd = thread_current();
     }
@@ -85,6 +91,7 @@ void ft_add_user_mapping(void *upage, void *kpage, struct thread * trd) {
     entry->kernel_vaddr = kpage;
     entry->user_vaddr = upage;
     entry->trd = trd;
+    printf("AGF: Thread %p added user mapping\n", thread_current());
 }
 
 void ft_init_entry(void *kpage) {
@@ -128,64 +135,85 @@ void ft_deinit_entries(void *kpage, size_t page_cnt) {
 
 // Find a physical page, write its contents to swap, and return its kernel
 // virtual address
-void * frame_evict(void) {
+void * frame_evict(size_t page_cnt) {
+    printf("AGF: Eviction is happening\n");
     eviction_lock_acquire();
+    // Find page_cnt contiguous pages that we can evict
     for (; true; clock_hand++) {
         if (clock_hand == end_of_frame_table) {
             clock_hand = frame_table;
         }
-        if (clock_hand->kernel_vaddr == NULL ||
-            clock_hand->user_vaddr == NULL ||
-            clock_hand->trd == NULL ||
-            clock_hand->trd->pagedir == NULL) {
-            // TODO(agf): Check that we really need conditions other than
-            // just clock_hand->kernel_vaddr == NULL
-            continue;
+        bool can_evict = true;;
+        size_t i;
+        for (i = 0; i < page_cnt; i++) {
+            struct ft_entry * fte = clock_hand + i;
+            if (fte == end_of_frame_table) {
+                can_evict = false;
+                break;
+            }
+            if (fte->kernel_vaddr == NULL ||
+                fte->user_vaddr == NULL ||
+                fte->trd == NULL ||
+                fte->trd->pagedir == NULL) {
+                // TODO(agf): Check that we really need conditions other than
+                // just fte->kernel_vaddr == NULL
+                can_evict = false;
+                continue;
+            }
+            if (pagedir_is_accessed(fte->trd->pagedir,
+                                    fte->kernel_vaddr)) {
+                can_evict = false;
+                pagedir_set_accessed(fte->trd->pagedir,
+                                     fte->kernel_vaddr, false);
+            }
+            if (pagedir_is_accessed(fte->trd->pagedir,
+                                    fte->user_vaddr)) {
+                can_evict = false;
+                pagedir_set_accessed(fte->trd->pagedir,
+                                     fte->user_vaddr, false);
+            }
         }
-        bool accessed = false;
-        if (pagedir_is_accessed(clock_hand->trd->pagedir,
-                                clock_hand->kernel_vaddr)) {
-            accessed = true;
-            pagedir_set_accessed(clock_hand->trd->pagedir,
-                                 clock_hand->kernel_vaddr, false);
-        }
-        if (pagedir_is_accessed(clock_hand->trd->pagedir,
-                                clock_hand->user_vaddr)) {
-            accessed = true;
-            pagedir_set_accessed(clock_hand->trd->pagedir,
-                                 clock_hand->user_vaddr, false);
-        }
-        if (!accessed) {
+        if (can_evict) {
             break;
         }
+        // TODO(agf): Panic if this is infinite-looping
     }
-    ASSERT(page_from_pool(user_pool, clock_hand->kernel_vaddr));
 
-    struct spt_entry * spte = spt_entry_get_or_create(clock_hand->user_vaddr,
-                                                      clock_hand->trd);
-
-    // TODO(agf): If the frame is from a read-only part of an executable file,
-    // we shouldn't use swap, because we can just read back from the
-    // executable. The frame table should include data to describe this.
-    // TODO(agf): The frame table could also describe whether the page in the
-    // frame is currently pinned.
-    // Should pin pages before reading into them from swap.
-    int swap_slot = swap_dump_ft_entry(clock_hand);
-    ASSERT(swap_slot != -1);
-    // Update SPT
-    spte->trd = clock_hand->trd;
-    spte->swap_page_number = swap_slot;
-    spte->file = NULL;
-
-    // Unmap the page from user space
-    ASSERT(clock_hand->trd->pagedir != NULL);
-    pagedir_clear_page(clock_hand->trd->pagedir, clock_hand->user_vaddr);
-
-    void * kernel_vaddr = clock_hand->kernel_vaddr;
     // TODO(agf): Could assert that kernel_vaddr matches up with framenum
-    clock_hand->kernel_vaddr = NULL;
-    clock_hand->user_vaddr = NULL;
-    clock_hand->trd = NULL;
+    // Kernel virtual address to return
+    void * kernel_vaddr = clock_hand->kernel_vaddr;
+
+    // Evict page_cnt pages, starting at clock_hand
+    size_t i;
+    for (i = 0; i < page_cnt; i++) {
+        struct ft_entry * fte = clock_hand + i;
+        ASSERT(fte < end_of_frame_table);
+        ASSERT(page_from_pool(user_pool, fte->kernel_vaddr));
+
+        struct spt_entry * spte = spt_entry_get_or_create(fte->user_vaddr,
+                                                          fte->trd);
+
+        // TODO(agf): If the frame is from a read-only part of an executable
+        // file, we shouldn't use swap, because we can just read back from the
+        // executable. The frame table should include data to describe this.
+        // TODO(agf): The frame table could also describe whether the page in
+        // the frame is currently pinned.
+        // Should pin pages before reading into them from swap.
+        int swap_slot = swap_dump_ft_entry(fte);
+        ASSERT(swap_slot != -1);
+        // Update SPT
+        spte->trd = fte->trd;
+        spte->swap_page_number = swap_slot;
+        spte->file = NULL;
+
+        // Unmap the page from user space
+        ASSERT(fte->trd->pagedir != NULL);
+        pagedir_clear_page(fte->trd->pagedir, fte->user_vaddr);
+
+        fte->kernel_vaddr = NULL;
+        fte->user_vaddr = NULL;
+        fte->trd = NULL;
+    }
 
     eviction_lock_release();
     return kernel_vaddr;

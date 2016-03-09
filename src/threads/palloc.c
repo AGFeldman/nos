@@ -73,7 +73,9 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     }
     else {
         if (flags & PAL_USER) {
-            pages = frame_evict();
+            // TODO(agf): frame_evict() should take the number of pages as
+            // an argument! We need this number of contiguous pages
+            pages = frame_evict(page_cnt);
             ASSERT(pages != NULL);
         }
         else if (flags & PAL_ASSERT) {

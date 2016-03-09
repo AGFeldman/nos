@@ -42,7 +42,9 @@ void syscall_init(void) {
 }
 
 void filesys_lock_acquire(void) {
+    printf("AGF: thread %p trying to acquire filesys lock\n", thread_current());
     lock_acquire(&filesys_lock);
+    printf("AGF: thread %p acquired filesys lock\n", thread_current());
 }
 
 bool filesys_lock_held(void) {
@@ -50,7 +52,9 @@ bool filesys_lock_held(void) {
 }
 
 void filesys_lock_release(void) {
+    printf("AGF: thread %p trying to release filesys lock\n", thread_current());
     lock_release(&filesys_lock);
+    printf("AGF: thread %p released filesys lock\n", thread_current());
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
@@ -264,6 +268,7 @@ void sys_read(struct intr_frame *f) {
             sys_exit_helper(-1);
         }
         filesys_lock_acquire();
+        // TODO(agf): Pin this!
         f->eax = file_read(afile, buf, n);
         filesys_lock_release();
     }

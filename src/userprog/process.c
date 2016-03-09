@@ -556,37 +556,30 @@ bool load_page_from_spte(struct spt_entry *spte) {
     // held:
     // filesys_lock_acquire(), then file_read(), which causes a page fault,
     // which causes load_page_from_spte() to be called.
-    bool already_held = filesys_lock_held();
-    if (!already_held) {
-        filesys_lock_acquire();
-    }
+    // Pinning should resolve this situation.
+    ASSERT(!filesys_lock_held());
+    filesys_lock_acquire();
     file_seek(spte->file, spte->file_ofs);
-    if (!already_held) {
-        filesys_lock_release();
-    }
+    filesys_lock_release();
+
     // Get a page of memory
+    // TODO(agf): We ned to make sure that the filesys lock is not held,
+    // because palloc might need to evict, and then it will need to acquire
+    // the filesys lock.
     uint8_t *kpage = palloc_get_page(PAL_USER);
     if (kpage == NULL) {
         return false;
     }
     // Load this page
     if (spte->file_read_bytes != 0) {
-        if (!already_held) {
-            filesys_lock_acquire();
-        }
-        // TODO(agf): To address aliasing, might want to do this access
-        // through upage instead of kpage.
+        filesys_lock_acquire();
         if (file_read(spte->file, kpage, spte->file_read_bytes) !=
                 (int) spte->file_read_bytes) {
-            if (!already_held) {
-                filesys_lock_release();
-            }
+            filesys_lock_release();
             palloc_free_page(kpage);
             return false;
         }
-        if (!already_held) {
-            filesys_lock_release();
-        }
+        filesys_lock_release();
     }
     size_t spte_zero_bytes = PGSIZE - spte->file_read_bytes;
     memset(kpage + spte->file_read_bytes, 0, spte_zero_bytes);

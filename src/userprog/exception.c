@@ -174,7 +174,10 @@ static void page_fault(struct intr_frame *f) {
                                                spte->key.addr, kpage, true);
                 ASSERT(result == true);
                 // Read page from swap
+                // TODO(agf): Shouldn't need this
+                eviction_lock_acquire();
                 swap_read_page(spte->swap_page_number, spte->key.addr);
+                eviction_lock_release();
                 // Free the swap slot
                 mark_slot_unused(spte->swap_page_number);
                 // TODO(agf): Update the SPT entry?
