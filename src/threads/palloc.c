@@ -89,6 +89,9 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
             memset(pages, 0, PGSIZE * page_cnt);
         }
         if (flags & PAL_USER) {
+            // TODO(agf): I sort of want to lock this until the pages get
+            // mapped into user memory, but I can avoid this by not evicting
+            // pages that have user_vaddr == NULL in their frame table.
             ft_init_entries(pages, page_cnt);
         }
     }

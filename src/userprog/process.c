@@ -528,14 +528,12 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         // TODO(agf): Free this later
-        vm_lock_acquire();
         struct spt_entry * spte = spt_entry_allocate(upage, NULL);
         ASSERT(spte != NULL);
         spte->file = file;
         spte->file_ofs = ofs;
         spte->file_read_bytes = page_read_bytes;
         spte->writable = writable;
-        vm_lock_release();
 
         // Advance
         read_bytes -= page_read_bytes;

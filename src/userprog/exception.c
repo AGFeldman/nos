@@ -145,7 +145,6 @@ static void page_fault(struct intr_frame *f) {
 
     // Load from Supplemental Page Table, if possible
     if (not_present) {
-        vm_lock_acquire();
         struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
         if (spte != NULL) {
             // TODO(agf): I sort of want to acquire a VM lock here
@@ -162,7 +161,6 @@ static void page_fault(struct intr_frame *f) {
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
                 if (load_page_from_spte(spte)) {
-                    vm_lock_release();
                     return;
                 }
             }
@@ -180,11 +178,9 @@ static void page_fault(struct intr_frame *f) {
                 // Free the swap slot
                 mark_slot_unused(spte->swap_page_number);
                 // TODO(agf): Update the SPT entry?
-                vm_lock_release();
                 return;
             }
         }
-        vm_lock_release();
     }
 
     // Grow the stack if the faulting address is a user address that looks like
