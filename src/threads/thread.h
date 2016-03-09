@@ -8,6 +8,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 
@@ -134,6 +135,9 @@ struct thread {
     /**@{*/
     uint32_t *pagedir;                  /*!< Page directory. */
     /**@{*/
+
+    // Supplemental page table
+    struct hash spt;
 #endif
 
     /*! Owned by thread.c. */

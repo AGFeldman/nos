@@ -17,6 +17,7 @@
 
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "vm/page.h"
 #endif
 
 /*! Random value for struct thread's `magic' member.
@@ -215,6 +216,11 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     lock_init(&t->life_lock);
     sema_down(&t->life_lock.semaphore);
     t->life_lock.holder = t;
+
+#ifdef USERPROG
+    /* Initialize supplemental page table */
+    spt_init(&t->spt);
+#endif
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
@@ -709,6 +715,7 @@ void thread_schedule_tail(struct thread *prev) {
         ASSERT(prev != cur);
         // Make it look like prev has released its life_lock
         prev->life_lock.holder = NULL;
+        // TODO(agf): Free the SPT, ifdef USERPROG
         sema_up(&prev->life_lock.semaphore);
         // TODO(agf): We never call anything like palloc_free_page(prev)
     }

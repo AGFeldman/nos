@@ -68,25 +68,32 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
     lock_release(&pool->lock);
 
-    if (page_idx != BITMAP_ERROR)
+    if (page_idx != BITMAP_ERROR) {
         pages = pool->base + PGSIZE * page_idx;
-    else
-        pages = NULL;
-
-    if (pages != NULL) {
-        if (flags & PAL_ZERO)
-            memset(pages, 0, PGSIZE * page_cnt);
     }
     else {
-        if (flags & PAL_ASSERT)
+        if (flags & PAL_USER) {
+            pages = frame_evict();
+            ASSERT(pages != NULL);
+        }
+        else if (flags & PAL_ASSERT) {
             PANIC("palloc_get: out of pages");
-        // TODO(agf): Remove this when we support eviction
-        if (flags & PAL_USER)
-            PANIC("palloc_get: out of pages 2");
+        }
+        else {
+            pages = NULL;
+        }
     }
 
-    if (flags & PAL_USER) {
-        ft_init_entries(pages, page_cnt);
+    if (pages != NULL) {
+        if (flags & PAL_ZERO) {
+            memset(pages, 0, PGSIZE * page_cnt);
+        }
+        if (flags & PAL_USER) {
+            // TODO(agf): I sort of want to lock this until the pages get
+            // mapped into user memory, but I can avoid this by not evicting
+            // pages that have user_vaddr == NULL in their frame table.
+            ft_init_entries(pages, page_cnt);
+        }
     }
 
     return pages;
@@ -160,6 +167,7 @@ static void init_pool(struct pool *p, void *base, size_t page_cnt,
 
 /*! Returns true if PAGE was allocated from POOL, false otherwise. */
 bool page_from_pool(const struct pool *pool, void *page) {
+    ASSERT(pool == &user_pool || pool == &kernel_pool);
     size_t page_no = pg_no(page);
     size_t start_page = pg_no(pool->base);
     size_t end_page = start_page + bitmap_size(pool->used_map);

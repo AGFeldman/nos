@@ -4,9 +4,13 @@
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
@@ -115,7 +119,8 @@ static void kill(struct intr_frame *f) {
 static void page_fault(struct intr_frame *f) {
     bool not_present;  /* True: not-present page, false: writing r/o page. */
     bool write;        /* True: access was write, false: access was read. */
-    bool user;         /* True: access by user, false: access by kernel. */
+    // TODO(agf)
+    // bool user;         /* True: access by user, false: access by kernel. */
     void *fault_addr;  /* Fault address. */
 
     /* Obtain faulting address, the virtual address that was accessed to cause
@@ -135,17 +140,55 @@ static void page_fault(struct intr_frame *f) {
     /* Determine cause. */
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
-    user = (f->error_code & PF_U) != 0;
+    // TODO(agf)
+    // user = (f->error_code & PF_U) != 0;
 
     // Load from Supplemental Page Table, if possible
     if (not_present) {
-        struct spt_entry * spte = spt_entry_lookup(thread_current()->pagedir,
-                                                   fault_addr);
-        if (spte != NULL &&
-            (!write || spte->writable) &&
-            load_page_from_spte(spte)) {
-            // We weren't trying to write to a read-only page, and we
-            // successfully loaded that page into memory from file
+        struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
+        if (spte != NULL) {
+            // TODO(agf): I sort of want to acquire a VM lock here
+            // But interrupt handlers should not wait on locks :(
+            // Instead, pinning something might provide the answer...
+            ASSERT(spte->key.addr == pg_round_down(fault_addr));
+            ASSERT(spte->trd == thread_current());
+            if (spte->file != NULL && (!write || spte->writable)) {
+                // We were trying to read from an executable file.
+                // We weren't trying to write to a read-only page, and we
+                // successfully loaded that page into memory from file.
+                // TODO(agf): load_page_from_spte() will only work the first
+                // time that an executable page gets loaded.
+                // TODO(agf): Rename load_page_from_spte() to indicate that
+                // it is only for executables.
+                if (load_page_from_spte(spte)) {
+                    return;
+                }
+            }
+            if (spte->swap_page_number != -1) {
+                // Obtain a free page and map it into memory.
+                // pagedir_set_page() updates the frame table entry.
+                uint8_t *kpage = palloc_get_page(PAL_USER);
+                // TODO(agf): Make the page read-only if needed
+                ASSERT(spte->trd->pagedir != NULL);
+                bool result = pagedir_set_page(spte->trd->pagedir,
+                                               spte->key.addr, kpage, true);
+                ASSERT(result == true);
+                // Read page from swap
+                swap_read_page(spte->swap_page_number, spte->key.addr);
+                // Free the swap slot
+                mark_slot_unused(spte->swap_page_number);
+                // TODO(agf): Update the SPT entry?
+                return;
+            }
+        }
+    }
+
+    // Grow the stack if the faulting address is a user address that looks like
+    // a stack access.
+    if (fault_addr != NULL && is_user_vaddr(fault_addr) &&
+        fault_addr >= (void *)((uint8_t *) f->esp - 32) &&
+        fault_addr >= PHYS_BASE - 2048 * PGSIZE) {
+        if (allocate_and_install_blank_page(fault_addr)) {
             return;
         }
     }

@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -248,12 +249,9 @@ struct Elf32_Phdr {
 
 static bool setup_stack(void **esp);
 static bool validate_segment(const struct Elf32_Phdr *, struct file *);
-static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
-                         uint32_t read_bytes, uint32_t zero_bytes,
-                         bool writable);
 static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
                               uint32_t read_bytes, uint32_t zero_bytes,
-                              bool writable, uint32_t *pagedir);
+                              bool writable);
 
 /*! Loads an ELF executable from FILE_NAME_AND_ARGS into the current thread.
     Stores the executable's entry point into *EIP and its initial stack pointer
@@ -369,8 +367,7 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
                     zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
                 }
                 if (!load_segment_lazy(file, file_page, (void *) mem_page,
-                                       read_bytes, zero_bytes, writable,
-                                       t->pagedir))
+                                       read_bytes, zero_bytes, writable))
                     goto done;
             }
             else {
@@ -502,6 +499,7 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
     return true;
 }
 
+// TODO(agf): Incorporate this comment from load_segment()
 /*! Loads a segment starting at offset OFS in FILE at address UPAGE.  In total,
     READ_BYTES + ZERO_BYTES bytes of virtual memory are initialized, as follows:
 
@@ -515,58 +513,13 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
 
     Return true if successful, false if a memory allocation error or disk read
     error occurs. */
-static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
-                         uint32_t read_bytes, uint32_t zero_bytes,
-                         bool writable) {
-    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-    ASSERT(pg_ofs(upage) == 0);
-    ASSERT(ofs % PGSIZE == 0);
-
-    filesys_lock_acquire();
-    file_seek(file, ofs);
-    filesys_lock_release();
-    while (read_bytes > 0 || zero_bytes > 0) {
-        /* Calculate how to fill this page.
-           We will read PAGE_READ_BYTES bytes from FILE
-           and zero the final PAGE_ZERO_BYTES bytes. */
-        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-        size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-        /* Get a page of memory. */
-        uint8_t *kpage = palloc_get_page(PAL_USER);
-        if (kpage == NULL)
-            return false;
-
-        /* Load this page. */
-        filesys_lock_acquire();
-        if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
-            filesys_lock_release();
-            palloc_free_page(kpage);
-            return false;
-        }
-        filesys_lock_release();
-        memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-        /* Add the page to the process's address space. */
-        if (!install_page(upage, kpage, writable)) {
-            palloc_free_page(kpage);
-            return false;
-        }
-
-        /* Advance. */
-        read_bytes -= page_read_bytes;
-        zero_bytes -= page_zero_bytes;
-        upage += PGSIZE;
-    }
-    return true;
-}
-
 static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
                               uint32_t read_bytes, uint32_t zero_bytes,
-                              bool writable, uint32_t *pagedir) {
+                              bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
+    // TODO(agf): Do a more comprehensive review of concurrent access to SPT
     while (read_bytes > 0 || zero_bytes > 0) {
         // Calculate how to fill this page.
         // We will read PAGE_READ_BYTES bytes from FILE
@@ -575,7 +528,7 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         // TODO(agf): Free this later
-        struct spt_entry * spte = spt_entry_allocate(pagedir, upage);
+        struct spt_entry * spte = spt_entry_allocate(upage, NULL);
         ASSERT(spte != NULL);
         spte->file = file;
         spte->file_ofs = ofs;
@@ -621,6 +574,8 @@ bool load_page_from_spte(struct spt_entry *spte) {
         if (!already_held) {
             filesys_lock_acquire();
         }
+        // TODO(agf): To address aliasing, might want to do this access
+        // through upage instead of kpage.
         if (file_read(spte->file, kpage, spte->file_read_bytes) !=
                 (int) spte->file_read_bytes) {
             if (!already_held) {
@@ -658,6 +613,21 @@ static bool setup_stack(void **esp) {
             palloc_free_page(kpage);
     }
     return success;
+}
+
+// Gets a frame from the user pool, fills it with zeros, and installs it in
+// the user virtual address mapping at the address indicated by |upage| (with
+// appropriate alignment; |upage| is rounded down).
+bool allocate_and_install_blank_page(void *upage) {
+    void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    if (kpage == NULL) {
+        return false;
+    }
+    bool install_success = install_page(pg_round_down(upage), kpage, true);
+    if (!install_success) {
+        palloc_free_page(kpage);
+    }
+    return install_success;
 }
 
 /*! Adds a mapping from user virtual address UPAGE to kernel
