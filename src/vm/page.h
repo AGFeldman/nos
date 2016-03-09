@@ -4,6 +4,7 @@
 #include <hash.h>
 #include <debug.h>
 #include "filesys/file.h"
+#include "lib/user/syscall.h"
 
 // A combination of page directory and user virtual address used as a hash
 // table key for the supplemental page table.
@@ -42,6 +43,9 @@ struct spt_entry {
     off_t file_ofs;
     size_t file_read_bytes;
     bool writable;
+
+    // ID for mmap and munmap
+    mapid_t mmapid;
 
     // TODO(agf): If the data is stored in swap, then we need info about that
 };

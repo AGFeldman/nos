@@ -50,6 +50,7 @@ struct spt_entry * spt_entry_allocate(uint32_t *pd, void *address) {
 
     // It is important that some fields be initialized
     entry->file = NULL;
+    entry->mmapid = 0;
 
     struct spt_entry * result = spt_entry_insert(entry);
     if (result == NULL) {

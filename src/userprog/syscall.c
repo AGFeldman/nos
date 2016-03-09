@@ -11,6 +11,7 @@
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/page.h"
 
 // Page size, in bytes.
 // This seems like it should be defined elsewhere, but apparently is not.
@@ -35,6 +36,8 @@ void sys_create(struct intr_frame *f);
 void sys_remove(struct intr_frame *f);
 void sys_close(struct intr_frame *f);
 void sys_tell(struct intr_frame *f);
+void sys_mmap(struct intr_frame *f);
+void sys_munmap(struct intr_frame *f);
 
 void syscall_init(void) {
     lock_init(&filesys_lock);
@@ -103,6 +106,10 @@ static void syscall_handler(struct intr_frame *f) {
         sys_tell(f);
     } else if (syscall_num == SYS_CLOSE) {
         sys_close(f);
+    } else if (syscall_num == SYS_MMAP) {
+        sys_mmap(f);
+    } else if (syscall_num == SYS_MUNMAP) {
+        sys_munmap(f);
     } else {
         // TODO(agf)
         printf("system call: not handled!\n");
@@ -315,3 +322,66 @@ void sys_seek(struct intr_frame *f) {
     file_seek(afile, position);
     filesys_lock_release();
 }
+
+/*
+ * mapid_t mmap (int fd, void *addr)
+ * Maps the file open as fd into the process's virtual address space.
+ * The entire file is mapped into consecutive virtual pages starting at addr.
+ */
+void sys_mmap(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    int fd = *((int *) f->esp + 1);
+    // fd can't be I/O
+    ASSERT(fd != 0 && fd != 1);
+
+    check_pointer_validity((int *) f->esp + 2);
+    void *addr = (void *) ((int *) f->esp + 2);
+    // Pintos assumes virtual page 0 is not mapped
+    ASSERT(addr != 0);
+
+    int open_files_index = fd - 2;
+    if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
+        return;
+    }
+    struct thread * intr_trd = thread_current();
+    struct file *file = intr_trd->open_files[open_files_index];
+    if (file != NULL) {
+        int len = file_length(file);
+        ASSERT(len != 0);
+        int i;
+        for (i = 0; i < len; i += PAGE_SIZE_BYTES) {
+            struct spt_entry * entry =
+                spt_entry_allocate(intr_trd->pagedir, addr + i);
+            entry->file = file;
+            entry->file_ofs = i;
+            entry->writable = true;
+            entry->mmapid = pg_no(addr);
+            entry->file_read_bytes = min(PAGE_SIZE_BYTES, len - i);
+        }
+
+    }
+
+};
+
+/* void munmap (mapid_t mapping)
+ * Unmaps the mapping designated by mapping, which must be a mapping ID returned
+ * by a previous call to mmap by the same process that has not yet been
+ * unmapped.
+ */
+void sys_munmap(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    mapid_t mapping = (mapid_t) *((int *) f->esp + 1);
+
+    struct hash *spt = thread_current()->spt;
+    struct hash_iterator i;
+    hash_first (&i, spt);
+    while (hash_next (&i)) {
+        struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
+               hash_elem);
+        if (entry->mmap_id == mapping) {
+            file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
+                entry->file_ofs);
+            entry->file = NULL;
+       }
+    }
+};
