@@ -350,7 +350,6 @@ void sys_seek(struct intr_frame *f) {
  * The entire file is mapped into consecutive virtual pages starting at addr.
  */
 void sys_mmap(struct intr_frame *f) {
-//printf("mmap!\n");
     check_pointer_validity((int *) f->esp + 1, f);
     int fd = *((int *) f->esp + 1);
     // fd can't be I/O
@@ -360,7 +359,6 @@ void sys_mmap(struct intr_frame *f) {
     }
     check_pointer_validity((int *) f->esp + 2, f);
     void *addr = (void *) *((int *) f->esp + 2);
-//printf("addr = %p\nfesp = %p\n", addr, f->esp);
     struct thread * intr_trd = thread_current();
     // Pintos assumes virtual page 0 is not mapped
     if (addr == 0 ||
@@ -383,7 +381,6 @@ void sys_mmap(struct intr_frame *f) {
         sys_exit_helper(-1);
     }
     int len = file_length(file);
-//printf("addr + len = %p\nf->esp     = %p\n", (char *) addr + len, f->esp);
     if ((char *) addr + ROUND_UP(len, PAGE_SIZE_BYTES) >= f->esp) {
         f->eax = -1;
         return;
@@ -428,9 +425,10 @@ void sys_munmap(struct intr_frame *f) {
         struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
                hash_elem);
         if (entry->mmapid == mapping) {
-
-            file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
+            if (pagedir_is_dirty(thread_current()->pagedir, entry->key.addr)) {
+                file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
                 entry->file_ofs);
+            }
             file = entry->file;
             entry->file = NULL;
        }
