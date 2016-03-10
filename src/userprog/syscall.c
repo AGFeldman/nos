@@ -288,11 +288,11 @@ void sys_read(struct intr_frame *f) {
         if (!afile) {
             sys_exit_helper(-1);
         }
-        pin_pages_by_buffer(buf, n);
+        pin_pages_by_buffer((unsigned char *)buf, n);
         filesys_lock_acquire();
         f->eax = file_read(afile, buf, n);
         filesys_lock_release();
-        unpin_pages_by_buffer(buf, n);
+        unpin_pages_by_buffer((unsigned char *)buf, n);
     }
 }
 
@@ -318,11 +318,11 @@ void sys_write(struct intr_frame *f) {
         struct thread *intr_trd = thread_current();
         /* Subtract 2 because fd 0 and 1 are taken for IO */
         struct file *afile = intr_trd->open_files[fd - 2];
-        pin_pages_by_buffer(buf, n);
+        pin_pages_by_buffer((unsigned char *)buf, n);
         filesys_lock_acquire();
         f->eax = file_write(afile, buf, n);
         filesys_lock_release();
-        unpin_pages_by_buffer(buf, n);
+        unpin_pages_by_buffer((unsigned char *)buf, n);
     }
 }
 
@@ -405,7 +405,7 @@ void sys_mmap(struct intr_frame *f) {
     }
     int len = file_length(file);
 //printf("addr + len = %p\nf->esp     = %p\n", (char *) addr + len, f->esp);
-    if ((char *) addr + ROUND_UP(len, PAGE_SIZE_BYTES) >= f->esp) {
+    if ((char *) addr + ROUND_UP(len, PAGE_SIZE_BYTES) >= (char *) f->esp) {
         f->eax = -1;
         return;
     }
