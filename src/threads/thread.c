@@ -622,6 +622,8 @@ static void init_thread(struct thread *t, const char *name, int priority,
     t->priority = priority;
     t->nice = nice;
     t->recent_cpu = recent_cpu;
+    t->pin_begin_page = NULL;
+    t->pin_end_page = NULL;
     t->magic = THREAD_MAGIC;
 
     int i;

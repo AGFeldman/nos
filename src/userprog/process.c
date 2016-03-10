@@ -548,7 +548,9 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
 // the data from that page of the file into the new page of memory, and
 // map the memory into the user's address space. If all this was successful,
 // return true. Otherwise, return false.
-bool load_page_from_spte(struct spt_entry *spte) {
+// If pinned is true, then the loaded page is pinned in physical memory before
+// it is mapped into physical memory.
+bool load_page_from_spte(struct spt_entry *spte, bool pin) {
     if (spte == NULL || spte->file == NULL) {
         return false;
     }
@@ -556,43 +558,44 @@ bool load_page_from_spte(struct spt_entry *spte) {
     // held:
     // filesys_lock_acquire(), then file_read(), which causes a page fault,
     // which causes load_page_from_spte() to be called.
-    bool already_held = filesys_lock_held();
-    if (!already_held) {
-        filesys_lock_acquire();
-    }
+    // Pinning should resolve this situation.
+    ASSERT(!filesys_lock_held());
+    filesys_lock_acquire();
     file_seek(spte->file, spte->file_ofs);
-    if (!already_held) {
-        filesys_lock_release();
-    }
+    filesys_lock_release();
+
     // Get a page of memory
+    // TODO(agf): We ned to make sure that the filesys lock is not held,
+    // because palloc might need to evict, and then it will need to acquire
+    // the filesys lock.
     uint8_t *kpage = palloc_get_page(PAL_USER);
     if (kpage == NULL) {
         return false;
     }
     // Load this page
     if (spte->file_read_bytes != 0) {
-        if (!already_held) {
-            filesys_lock_acquire();
-        }
-        // TODO(agf): To address aliasing, might want to do this access
-        // through upage instead of kpage.
+        filesys_lock_acquire();
         if (file_read(spte->file, kpage, spte->file_read_bytes) !=
                 (int) spte->file_read_bytes) {
-            if (!already_held) {
-                filesys_lock_release();
-            }
+            filesys_lock_release();
             palloc_free_page(kpage);
             return false;
         }
-        if (!already_held) {
-            filesys_lock_release();
-        }
+        filesys_lock_release();
     }
     size_t spte_zero_bytes = PGSIZE - spte->file_read_bytes;
     memset(kpage + spte->file_read_bytes, 0, spte_zero_bytes);
+
+    if (pin) {
+        // Pin the page in physical memory before installing it in userspace
+        bool acquired = lock_try_acquire(&ft_lookup(kpage)->lock);
+        ASSERT(acquired);
+    }
+
     // Add the page to the process's address space
     if (!install_page(spte->key.addr, kpage, spte->writable)) {
         palloc_free_page(kpage);
+        // TODO(agf): Also unpin it
         return false;
     }
     return true;
@@ -618,10 +621,14 @@ static bool setup_stack(void **esp) {
 // Gets a frame from the user pool, fills it with zeros, and installs it in
 // the user virtual address mapping at the address indicated by |upage| (with
 // appropriate alignment; |upage| is rounded down).
-bool allocate_and_install_blank_page(void *upage) {
+bool allocate_and_install_blank_page(void *upage, bool pin) {
     void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kpage == NULL) {
         return false;
+    }
+    if (pin) {
+        bool acquired = lock_try_acquire(&ft_lookup(kpage)->lock);
+        ASSERT(acquired);
     }
     bool install_success = install_page(pg_round_down(upage), kpage, true);
     if (!install_success) {

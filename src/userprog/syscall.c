@@ -11,6 +11,7 @@
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/frame.h"
 #include "vm/page.h"
 #include <round.h>
 
@@ -64,6 +65,7 @@ void check_pointer_validity(void *p, struct intr_frame *f) {
     }
     bool user_stack = false;
     // TODO(agf): Document max stack size of 2048 * PGSIZE
+    // TODO(agf): This is very similar to the code in the pagefault handler
     if (p >= (void *)((uint8_t *) f->esp - 32) &&
             p >= PHYS_BASE - 2048 * PGSIZE) {
         user_stack = true;
@@ -73,10 +75,25 @@ void check_pointer_validity(void *p, struct intr_frame *f) {
         // This stack access might cause a page fault, which is fine; the page
         // fault handler will grow the stack if needed.
     }
-    uint32_t *pd = thread_current()->pagedir;
+    struct thread * cur_thread = thread_current();
+    uint32_t *pd = cur_thread->pagedir;
+    // TODO(agf): A lot of this is repeated in the page fault handler
     if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(p, NULL) == NULL) {
         if (user_stack) {
-            if (allocate_and_install_blank_page(p)) {
+            bool pin = false;
+            if (cur_thread->pin_begin_page != NULL) {
+                ASSERT(cur_thread->pin_end_page != NULL);
+                ASSERT(pg_round_down(cur_thread->pin_begin_page) ==
+                       cur_thread->pin_begin_page);
+                ASSERT(pg_round_down(cur_thread->pin_end_page) ==
+                       cur_thread->pin_end_page);
+                unsigned char * round_addr = pg_round_down(p);
+                if (round_addr >= cur_thread->pin_begin_page &&
+                    round_addr <= cur_thread->pin_end_page) {
+                    pin = true;
+                }
+            }
+            if (allocate_and_install_blank_page(p, pin)) {
                 return;
             }
         }
@@ -271,9 +288,11 @@ void sys_read(struct intr_frame *f) {
         if (!afile) {
             sys_exit_helper(-1);
         }
+        pin_pages_by_buffer((unsigned char *)buf, n);
         filesys_lock_acquire();
         f->eax = file_read(afile, buf, n);
         filesys_lock_release();
+        unpin_pages_by_buffer((unsigned char *)buf, n);
     }
 }
 
@@ -299,9 +318,11 @@ void sys_write(struct intr_frame *f) {
         struct thread *intr_trd = thread_current();
         /* Subtract 2 because fd 0 and 1 are taken for IO */
         struct file *afile = intr_trd->open_files[fd - 2];
+        pin_pages_by_buffer((unsigned char *)buf, n);
         filesys_lock_acquire();
         f->eax = file_write(afile, buf, n);
         filesys_lock_release();
+        unpin_pages_by_buffer((unsigned char *)buf, n);
     }
 }
 
@@ -365,6 +386,7 @@ void sys_mmap(struct intr_frame *f) {
             // Address must be page aligned
             (int) addr % PAGE_SIZE_BYTES != 0 ||
             // Address must not overlap previously mapped memory
+            // TODO: should check the entire address range
             spt_entry_lookup(addr, &intr_trd->spt) != NULL
             // Address must not overlap stack
            /* addr >= f->esp*/) {
