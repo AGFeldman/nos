@@ -54,6 +54,7 @@ struct spt_entry * spt_entry_allocate(void * address, struct thread * trd) {
 
     // It is important that some fields be initialized
     entry->file = NULL;
+    entry->mmapid = 0;
     entry->swap_page_number = -1;
     entry->trd = trd;
 

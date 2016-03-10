@@ -12,6 +12,8 @@
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "vm/frame.h"
+#include "vm/page.h"
+#include <round.h>
 
 // Page size, in bytes.
 // This seems like it should be defined elsewhere, but apparently is not.
@@ -36,6 +38,8 @@ void sys_create(struct intr_frame *f);
 void sys_remove(struct intr_frame *f);
 void sys_close(struct intr_frame *f);
 void sys_tell(struct intr_frame *f);
+void sys_mmap(struct intr_frame *f);
+void sys_munmap(struct intr_frame *f);
 
 void syscall_init(void) {
     lock_init(&filesys_lock);
@@ -137,6 +141,10 @@ static void syscall_handler(struct intr_frame *f) {
         sys_tell(f);
     } else if (syscall_num == SYS_CLOSE) {
         sys_close(f);
+    } else if (syscall_num == SYS_MMAP) {
+        sys_mmap(f);
+    } else if (syscall_num == SYS_MUNMAP) {
+        sys_munmap(f);
     } else {
         // TODO(agf)
         printf("system call: not handled!\n");
@@ -356,3 +364,97 @@ void sys_seek(struct intr_frame *f) {
     file_seek(afile, position);
     filesys_lock_release();
 }
+
+/*
+ * mapid_t mmap (int fd, void *addr)
+ * Maps the file open as fd into the process's virtual address space.
+ * The entire file is mapped into consecutive virtual pages starting at addr.
+ */
+void sys_mmap(struct intr_frame *f) {
+//printf("mmap!\n");
+    check_pointer_validity((int *) f->esp + 1, f);
+    int fd = *((int *) f->esp + 1);
+    // fd can't be I/O
+    if (fd == 0 || fd == 1) {
+        f->eax = -1;
+        return;
+    }
+    check_pointer_validity((int *) f->esp + 2, f);
+    void *addr = (void *) *((int *) f->esp + 2);
+//printf("addr = %p\nfesp = %p\n", addr, f->esp);
+    struct thread * intr_trd = thread_current();
+    // Pintos assumes virtual page 0 is not mapped
+    if (addr == 0 ||
+            // Address must be page aligned
+            (int) addr % PAGE_SIZE_BYTES != 0 ||
+            // Address must not overlap previously mapped memory
+            spt_entry_lookup(addr, &intr_trd->spt) != NULL
+            // Address must not overlap stack
+           /* addr >= f->esp*/) {
+        f->eax = -1;
+        return;
+    }
+    int open_files_index = fd - 2;
+    if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
+        f->eax = -1;
+        return;
+    }
+    struct file *file = intr_trd->open_files[open_files_index];
+    if (file == NULL) {
+        sys_exit_helper(-1);
+    }
+    int len = file_length(file);
+//printf("addr + len = %p\nf->esp     = %p\n", (char *) addr + len, f->esp);
+    if ((char *) addr + ROUND_UP(len, PAGE_SIZE_BYTES) >= f->esp) {
+        f->eax = -1;
+        return;
+    }
+    else {
+        struct file * file_cp = file_reopen(file);
+        if (len == 0) {
+            f->eax = -1;
+            return;
+        }
+        int i;
+        for (i = 0; i < len; i += PAGE_SIZE_BYTES) {
+            struct spt_entry * entry =
+                spt_entry_allocate(addr + i, NULL);
+            entry->file = file_cp;
+            entry->file_ofs = i;
+            entry->writable = true;
+            entry->mmapid = pg_no(addr);
+            entry->file_read_bytes = (PAGE_SIZE_BYTES < len - i) ?
+                PAGE_SIZE_BYTES : len - i;
+        }
+
+        f->eax = pg_no(addr);
+    }
+
+};
+
+/* void munmap (mapid_t mapping)
+ * Unmaps the mapping designated by mapping, which must be a mapping ID returned
+ * by a previous call to mmap by the same process that has not yet been
+ * unmapped.
+ */
+void sys_munmap(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1, f);
+    mapid_t mapping = (mapid_t) *((int *) f->esp + 1);
+
+    struct hash spt = thread_current()->spt;
+    struct hash_iterator i;
+    hash_first (&i, &spt);
+    struct file *file = NULL;
+    while (hash_next (&i)) {
+        struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
+               hash_elem);
+        if (entry->mmapid == mapping) {
+
+            file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
+                entry->file_ofs);
+            file = entry->file;
+            entry->file = NULL;
+       }
+    }
+    file_close(file);
+};

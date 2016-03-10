@@ -5,6 +5,7 @@
 #include <debug.h>
 #include "threads/thread.h"
 #include "filesys/file.h"
+#include "lib/user/syscall.h"
 
 struct spt_key {
     // User virtual address, which we will use as the input to a hash function.
@@ -39,6 +40,10 @@ struct spt_entry {
     size_t file_read_bytes;
     bool writable;
 
+    // ID for mmap and munmap
+    mapid_t mmapid;
+
+    // TODO(agf): If the data is stored in swap, then we need info about that
     // Fields used for loading from swap files
     int swap_page_number;
 
