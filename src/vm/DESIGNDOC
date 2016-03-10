@@ -16,8 +16,8 @@ Aaron Feldman <feldmando@gmail.com>
 7 late tokens
 
 >> What is the Git repository and commit hash for your submission?
-   (You only need to include the commit-hash in the file you submit
-   on Moodle.)
+>> (You only need to include the commit-hash in the file you submit
+>> on Moodle.)
 
    Repository URL:  https://github.com/AGFeldman/nos
    commit TODO(agf)
@@ -40,8 +40,14 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
 >> Make sure that each member's total time is listed.
 
+Julie: >15 hours
+Aaron: >23 hours
+
 >> L2: What did each team member focus on for this assignment?  Keep
 >> descriptions to 25-30 words or less.
+
+Julie: MMapped files, some DESIGNDOC
+Aaron: Everything else
 
 Note that this design document is a bit long.  Most of the questions can be
 answered pretty briefly.  Don't feel a need to write a long answer if it is
@@ -61,19 +67,41 @@ not required by the question.
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
 
+Given a user virtual address, we find the supplemental page table associated
+with thread_current(), and use the user virtual address as a key into the
+supplemental page table, which is a hash table. The supplemental page table
+has fields that are used if the page is from swap, executable file, or mmapped
+file.
+
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
+
+We avoid this issue by checking both the kernel virtual address and the
+user virtual address for accessed-ness or dirty-ness.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
+There are two ways that a new frame can be acquired: From one of palloc's 
+pools, or by eviction. palloc already uses a lock to protect its pools.
+We uses a global eviction_lock() to make sure that only one process can evict
+at a time.
+
 ---- RATIONALE ----
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+
+We did not consider many other data structures for the supplemental page table.
+It is clear that the key into some sort of collection would need to be the
+user virtual address. There are too many user virtual addresses to make an
+array feasible (it would be too sparse), so a hash table is a good choice.
+We considered using one global hash table with (user virtual address, 
+page_directory) as the key, but decided that cleanup would be easier if the
+tables were per-process.
 
 		       PAGING TO AND FROM DISK
 		       =======================
@@ -89,13 +117,34 @@ not required by the question.
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
 
+We use the "clock" algorithm. We have an array of frame table entries
+for frames that are in physical memory. The clock hand sweeps over them one
+by one. If it finds one that does not have its accessed bit set, it evicts
+it. Otherwise, it clears the accessed bit and moves on.
+
+One wrinkle is that, in order to satisfy palloc(), we gave our eviction 
+algorithm the ability to evict multiple contiguous pages. We still check
+that all of them have the accessed bit unset; this is just a careful extension
+of the clock algorithm.
+
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
 
+There is only one frame table entry for each physical frame. When a page is
+evicted from a frame, the frame table entry is cleared. After the frame is 
+given to a process again, the frame table entry is set again. 
+
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+
+We cause the stack to be extended into the page that faulted if the following
+three conditions are true:
+- The page fault occurs at a user address
+- The faulting address is no more than 8 MB into userspace. (Thus, the user
+  stack size limit is 8 MB.)
+- The faulting address is no more than 32 bytes below the stack pointer.
 
 ---- SYNCHRONIZATION ----
 
@@ -103,6 +152,22 @@ not required by the question.
 >> particular, explain how it prevents deadlock.  (Refer to the
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
+
+We still have a global filesystem lock, and we use a global lock to guard frame
+eviction code. The one deadlock that we ran into is: What if the filesystem
+lock is acquired, and then we need to evict a page before the filesystem lock
+is released? Eviction might require writing to swap, which would require the
+filesystem lock (since the same block device is used). We avoid this situation
+by ensuring that operations (outside of eviction code) that require the 
+filesystem lock do not page-fault. We do this by pinning the necessary memory
+before the filesystem lock is acquired. For example, to read `n` bytes into a
+userspace buffer `buf`, we would do:
+pin_pages_by_buffer(buf, n);
+filesys_lock_acquire();
+file_read(buf, n);
+filesys_lock_release();
+unpin_pages_by_buffer(buf, n);
+The approach for write() is almost identical.
 
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
@@ -114,11 +179,21 @@ not required by the question.
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
 
+We acquire the eviction lock before reading a page in from swap; this prevents
+the page getting read in from getting evicted. Reads from the filesystem end
+up being protected by the filesystem lock (since eviction would need to cause
+a write to the filesystem.)
+
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
+As previously mentioned, we pin pages in physical memory before read() and 
+write() system calls. If other system calls need to page-in, they will do it
+through the pagefault handler. Accesses to invalid virtual addresses could
+mean that the user stack should grow. Otherwise, the process exits.
 
 ---- RATIONALE ----
 
@@ -127,6 +202,9 @@ not required by the question.
 >> complicates synchronization and raises the possibility for deadlock
 >> but allows for high parallelism.  Explain where your design falls
 >> along this continuum and why you chose to design it this way.
+
+Our system is as simple as possible; we happily use global locks for the 
+filesystem and for eviction code.
 
 			 MEMORY MAPPED FILES
 			 ===================
@@ -191,6 +269,8 @@ penalized.  We can't fix things until we know about them.  :-)
 
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
+
+Way too easy. (Just kidding.)
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
