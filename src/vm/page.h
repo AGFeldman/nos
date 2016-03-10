@@ -16,8 +16,6 @@ struct spt_key {
 };
 
 // Supplemental page table entry
-// TODO(agf): For now, some of these fields are just *guesses* at what we might
-// want
 struct spt_entry {
     // The page-directory and user-virtual-address combination that uniquely
     // identifies this spt_entry.
@@ -26,6 +24,7 @@ struct spt_entry {
     // Hash table element
     struct hash_elem hash_elem;
 
+    // Not used
     // Physical address
     void *physical_addr;
 

@@ -344,8 +344,6 @@ bool load(const char *file_name_and_args, void (**eip) (void), void **esp) {
         case PT_SHLIB:
             goto done;
 
-        // TODO(agf): I think around here is where we change to lazily loading
-        // the program
         case PT_LOAD:
             if (validate_segment(&phdr, file)) {
                 bool writable = (phdr.p_flags & PF_W) != 0;

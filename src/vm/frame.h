@@ -7,7 +7,6 @@
 #include "threads/loader.h"
 
 // Frame table entry
-// TODO(agf): For now, these fields are just *guesses* at what we might want
 struct ft_entry {
     // Kernel virtual address of page that occupies this frame
     void * kernel_vaddr;
@@ -15,7 +14,9 @@ struct ft_entry {
     void * user_vaddr;
     // Thread associated with this user address
     struct thread * trd;
+    // Used to synchronize eviction and pinning
     struct lock lock;
+    // Scratch space used during eviction
     bool acquired_during_eviction;
 };
 

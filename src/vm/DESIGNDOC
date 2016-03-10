@@ -27,6 +27,11 @@ Aaron Feldman <feldmando@gmail.com>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+We ran tests with bochs: make SIMULATOR="--bochs" check
+
+Since synchronization bugs are the devil: On my machine, this passes all
+vm/ tests except multi-recurse, with the default jitter value.
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
@@ -61,6 +66,56 @@ not required by the question.
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+# In each USERPROG thread struct, we add a field for the supplemental page 
+# table:
+    struct hash spt;
+
+# From page.h:
+# Sorry this is messy, it's right before 2am:
+struct spt_key {
+    // User virtual address, which we will use as the input to a hash function.
+    // This address should be the start of a page. TODO(agf): Assert this
+    // in the appropriate functions, such as spt_entry_hash() and
+    // spt_entry_lookup().
+    void *addr;
+};
+
+// Supplemental page table entry
+struct spt_entry {
+    // The page-directory and user-virtual-address combination that uniquely
+    // identifies this spt_entry.
+    struct spt_key key;
+
+    // Hash table element
+    struct hash_elem hash_elem;
+
+    // Not used
+    // Physical address
+    void *physical_addr;
+
+    // True if the page is an all-zero page
+    // TODO(agf): This is not being used yet. Instead, when loading an
+    // executable, we have a non-null "file" field with file_read_bytes == 0.
+    bool anonymous;
+
+    // Fields used to lazily load executable files
+    struct file *file;
+    off_t file_ofs;
+    size_t file_read_bytes;
+    bool writable;
+
+    // ID for mmap and munmap
+    mapid_t mmapid;
+
+    // TODO(agf): If the data is stored in swap, then we need info about that
+    // Fields used for loading from swap files
+    int swap_page_number;
+
+    struct thread * trd;
+};
+
+ 
 
 ---- ALGORITHMS ----
 
@@ -111,6 +166,79 @@ tables were per-process.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+# palloc.c's `struct pool` got moved to palloc.h so that we could use it
+# from frame table code. In particular, we wanted to call functions like
+# page_from_pool(), and we wanted to get the size of the bitmap. The stuct
+# definition itself is unchanged.
+/*! A memory pool. */
+struct pool {
+    struct lock lock;                   /*!< Mutual exclusion. */
+    struct bitmap *used_map;            /*!< Bitmap of free pages. */
+    uint8_t *base;                      /*!< Base of pool. */
+};
+
+# Each thread has a pin_begin_page and pin_end_page field. If not NULL, these
+# fields describe a range of pages that should be pinned by the pagefault
+# handler between acquiring frames and mapping to userspace.
+    // Page-aligned pointers or NULL pointers
+    // If both are not NULL, then they indicate to the page fault handler that
+    // user memory accessses that fall in the pages between pin_begin_page
+    // and pin_end_page, inclusive, should be pinned to physical memory
+    // after being loaded into physical memory and before being mapped to
+    // userspace.
+    unsigned char * pin_begin_page;
+    unsigned char * pin_end_page;
+
+# From frame.c:
+// The address where the frame table begins
+static struct ft_entry * frame_table;
+// One address past the last entry in the frame table
+static struct ft_entry * end_of_frame_table;
+// Pointer to the user pool structure from palloc.c
+static struct pool * user_pool;
+// The page number for the base page of the user pool
+static size_t user_pool_base_pg_no;
+// The number of frames that can hold user pages.
+// Excludes frames that store the user-pool bitmap.
+static size_t num_user_frames;
+// Used for clock eviction policy.
+static struct ft_entry * clock_hand;
+// Lock used to protect eviction code
+static struct lock eviction_lock;
+
+# From frame.h:
+# This represents an entry in the frame table
+// Frame table entry
+struct ft_entry {
+    // Kernel virtual address of page that occupies this frame
+    void * kernel_vaddr;
+    // User virtual address (if any) of the page that occupies this frame
+    void * user_vaddr;
+    // Thread associated with this user address
+    struct thread * trd;
+    // Used to synchronize eviction and pinning
+    struct lock lock;
+    // Scratch space used during eviction
+    bool acquired_during_eviction;
+};
+
+# From swap.c:
+# These are used to interface with the swap device
+static struct block * swap_block;
+static int sectors_needed_for_a_page;
+static int num_swap_pages;
+static struct swapt_entry * swapt;
+static struct lock swap_block_lock;
+
+# From swap.h:
+// This is an entry in the swap table
+struct swapt_entry {
+    // Kernel virtual address
+    void * kaddr;
+    // User virtual address
+    void * uaddr;
+};
 
 ---- ALGORITHMS ----
 
@@ -173,6 +301,9 @@ The approach for write() is almost identical.
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
+Frames do have a lock that can be used for this purpose. We try to acquire
+this lock during eviction, and we acquire it in order to pin a frame.
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
@@ -271,6 +402,8 @@ penalized.  We can't fix things until we know about them.  :-)
 >> easy or too hard?  Did it take too long or too little time?
 
 Way too easy. (Just kidding.)
+Aaron: I actually found this really enjoyable, though it took a huge amount
+of time.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
