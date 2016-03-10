@@ -349,16 +349,14 @@ void sys_seek(struct intr_frame *f) {
  * The entire file is mapped into consecutive virtual pages starting at addr.
  */
 void sys_mmap(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     int fd = *((int *) f->esp + 1);
     // fd can't be I/O
     ASSERT(fd != 0 && fd != 1);
-
-    check_pointer_validity((int *) f->esp + 2);
-    void *addr = (void *) ((int *) f->esp + 2);
+    check_pointer_validity((int *) f->esp + 2, f);
+    void *addr = (void *) *((int *) f->esp + 2);
     // Pintos assumes virtual page 0 is not mapped
     ASSERT(addr != 0);
-
     int open_files_index = fd - 2;
     if (open_files_index < 0 || open_files_index >= MAX_FILE_DESCRIPTORS) {
         return;
@@ -371,14 +369,16 @@ void sys_mmap(struct intr_frame *f) {
         int i;
         for (i = 0; i < len; i += PAGE_SIZE_BYTES) {
             struct spt_entry * entry =
-                spt_entry_allocate(intr_trd->pagedir, addr + i);
+                spt_entry_allocate(addr + i, NULL);
             entry->file = file;
             entry->file_ofs = i;
             entry->writable = true;
             entry->mmapid = pg_no(addr);
-            entry->file_read_bytes = min(PAGE_SIZE_BYTES, len - i);
+            entry->file_read_bytes = (PAGE_SIZE_BYTES < len - i) ?
+                PAGE_SIZE_BYTES : len - i;
         }
 
+        f->eax = pg_no(addr);
     }
 
 };
@@ -389,16 +389,16 @@ void sys_mmap(struct intr_frame *f) {
  * unmapped.
  */
 void sys_munmap(struct intr_frame *f) {
-    check_pointer_validity((int *) f->esp + 1);
+    check_pointer_validity((int *) f->esp + 1, f);
     mapid_t mapping = (mapid_t) *((int *) f->esp + 1);
 
-    struct hash *spt = thread_current()->spt;
+    struct hash spt = thread_current()->spt;
     struct hash_iterator i;
-    hash_first (&i, spt);
+    hash_first (&i, &spt);
     while (hash_next (&i)) {
         struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
                hash_elem);
-        if (entry->mmap_id == mapping) {
+        if (entry->mmapid == mapping) {
             file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
                 entry->file_ofs);
             entry->file = NULL;
