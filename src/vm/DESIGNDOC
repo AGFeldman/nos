@@ -13,6 +13,8 @@ Aaron Feldman <feldmando@gmail.com>
 
 >> Specify how many late tokens you are using on this assignment:  
 
+7 late tokens
+
 >> What is the Git repository and commit hash for your submission?
    (You only need to include the commit-hash in the file you submit
    on Moodle.)
@@ -135,14 +137,33 @@ not required by the question.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+struct spt_entry {
+    [...]
+    // ID for mmap and munmap
+    mapid_t mmapid;
+}
+For keeping track of id's returned by mmap and used by munmap.
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
+Memory mapped files get entries in the same supplemental page table as 
+everything else, with the differences that they are always writable and 
+have a special id. They are page faulted in in exactly the same manner
+as executables. When mmap'd pages are evicted, they are written back 
+into the file instead of going into swap.
+
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+
+When mmap is called, it checks the supplemental page table to see if there
+is already an entry for the memory location it is being asked for.
+TODO: Check each page of the new file for overlap with old files
+To check for stack overlap, it compares the location of the end of the last
+page of the file to the location of the stack pointer.
 
 ---- RATIONALE ----
 
@@ -152,6 +173,12 @@ not required by the question.
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+
+Executables and mmap'd files share the same paging in code because they
+use almost exactly the same fields in the supplemental page table. They
+have completely separate implementations for write-back because they go
+to different places at different times (mmap'd files must be unmapped
+when the process exits).
 
 			   SURVEY QUESTIONS
 			   ================
