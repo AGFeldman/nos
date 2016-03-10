@@ -140,13 +140,22 @@ struct thread {
     struct hash spt;
 #endif
 
+    /* Fixed-size array of pointers to open file structs */
+    struct file *open_files[16];
+
+    // Page-aligned pointers or NULL pointers
+    // If both are not NULL, then they indicate to the page fault handler that
+    // user memory accessses that fall in the pages between pin_begin_page
+    // and pin_end_page, inclusive, should be pinned to physical memory
+    // after being loaded into physical memory and before being mapped to
+    // userspace.
+    unsigned char * pin_begin_page;
+    unsigned char * pin_end_page;
+
     /*! Owned by thread.c. */
     /**@{*/
     unsigned magic;                     /* Detects stack overflow. */
     /**@}*/
-
-    /* Fixed-size array of pointers to open file structs */
-    struct file *open_files[16];
 };
 
 /*! If false (default), use round-robin scheduler.

@@ -24,7 +24,7 @@ struct file * file_open(struct inode *inode) {
     else {
         inode_close(inode);
         free(file);
-        return NULL; 
+        return NULL;
     }
 }
 
@@ -39,7 +39,7 @@ void file_close(struct file *file) {
     if (file != NULL) {
         file_allow_write(file);
         inode_close(file->inode);
-        free(file); 
+        free(file);
     }
 }
 

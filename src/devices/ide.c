@@ -127,12 +127,12 @@ void ide_init (void) {
         lock_init(&c->lock);
         c->expecting_interrupt = false;
         sema_init(&c->completion_wait, 0);
- 
+
         /* Initialize devices. */
         for (dev_no = 0; dev_no < 2; dev_no++) {
             struct ata_disk *d = &c->devices[dev_no];
             snprintf(d->name, sizeof d->name,
-                     "hd%c", 'a' + chan_no * 2 + dev_no); 
+                     "hd%c", 'a' + chan_no * 2 + dev_no);
             d->channel = c;
             d->dev_no = dev_no;
             d->is_ata = false;
@@ -199,7 +199,7 @@ static void reset_channel(struct channel *c) {
     /* Wait for device 0 to clear BSY. */
     if (present[0]) {
         select_device(&c->devices[0]);
-        wait_while_busy(&c->devices[0]); 
+        wait_while_busy(&c->devices[0]);
     }
 
     /* Wait for device 1 to clear BSY. */
@@ -234,11 +234,11 @@ static bool check_device_type(struct ata_disk *d) {
     if ((error != 1 && (error != 0x81 || d->dev_no == 1)) ||
         (status & STA_DRDY) == 0 || (status & STA_BSY) != 0) {
         d->is_ata = false;
-        return error != 0x81;      
+        return error != 0x81;
     }
     else {
         d->is_ata = (lbam == 0 && lbah == 0) || (lbam == 0x3c && lbah == 0xc3);
-        return true; 
+        return true;
     }
 }
 
@@ -308,7 +308,7 @@ static char * descramble_ata_string(char *string, int size) {
     for (size--; size > 0; size--) {
       int c = string[size - 1];
       if (c != '\0' && !isspace(c))
-          break; 
+          break;
     }
     string[size] = '\0';
 
@@ -359,7 +359,7 @@ static void select_sector(struct ata_disk *d, block_sector_t sec_no) {
     struct channel *c = d->channel;
 
     ASSERT(sec_no < (1UL << 28));
-  
+
     select_device_wait(d);
     outb(reg_nsect(c), 1);
     outb(reg_lbal(c), sec_no);
@@ -417,7 +417,7 @@ static void wait_until_idle(const struct ata_disk *d) {
 static bool wait_while_busy(const struct ata_disk *d) {
     struct channel *c = d->channel;
     int i;
-  
+
     for (i = 0; i < 3000; i++) {
         if (i == 700)
             printf("%s: busy, waiting...", d->name);
