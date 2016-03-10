@@ -155,11 +155,41 @@ void sys_halt() {
     shutdown_power_off();
 }
 
+// Return true if a mmapid was processed, false otherwise
+static bool sys_munmap_helper(mapid_t mapping) {
+    struct hash spt = thread_current()->spt;
+    struct hash_iterator i;
+    hash_first (&i, &spt);
+    struct file *file = NULL;
+    while (hash_next (&i)) {
+        struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
+               hash_elem);
+        if (mapping == 0 && entry->mmapid != 0) {
+            mapping = entry->mmapid;
+        }
+        if (entry->mmapid == mapping && mapping != 0) {
+            if (pagedir_is_dirty(thread_current()->pagedir, entry->key.addr)) {
+                filesys_lock_acquire();
+                ASSERT(entry->file != NULL);
+                file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
+                              entry->file_ofs);
+                filesys_lock_release();
+            }
+            file = entry->file;
+            entry->file = NULL;
+            entry->mmapid = 0;
+       }
+    }
+    file_close(file);
+    return file != NULL;
+}
+
 void sys_exit_helper(int status) {
     if (filesys_lock_held()) {
         filesys_lock_release();
     }
     printf("%s: exit(%d)\n", thread_name(), status);
+    while (sys_munmap_helper(0));
     thread_current()->exit_status = status;
     thread_exit();
 }
@@ -438,22 +468,5 @@ void sys_mmap(struct intr_frame *f) {
 void sys_munmap(struct intr_frame *f) {
     check_pointer_validity((int *) f->esp + 1, f);
     mapid_t mapping = (mapid_t) *((int *) f->esp + 1);
-
-    struct hash spt = thread_current()->spt;
-    struct hash_iterator i;
-    hash_first (&i, &spt);
-    struct file *file = NULL;
-    while (hash_next (&i)) {
-        struct spt_entry *entry = hash_entry (hash_cur (&i), struct spt_entry,
-               hash_elem);
-        if (entry->mmapid == mapping) {
-            if (pagedir_is_dirty(thread_current()->pagedir, entry->key.addr)) {
-                file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
-                entry->file_ofs);
-            }
-            file = entry->file;
-            entry->file = NULL;
-       }
-    }
-    file_close(file);
+    sys_munmap_helper(mapping);
 };
