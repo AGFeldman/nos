@@ -176,7 +176,6 @@ static void page_fault(struct intr_frame *f) {
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
                 if (load_page_from_spte(spte, pin)) {
-// printf("done page-fault\n");
                     return;
                 }
             }
@@ -202,7 +201,6 @@ static void page_fault(struct intr_frame *f) {
                 // Free the swap slot
                 mark_slot_unused(spte->swap_page_number);
                 // TODO(agf): Update the SPT entry?
-// printf("done page faulting\n");
                 return;
             }
         }
