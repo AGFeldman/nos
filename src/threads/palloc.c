@@ -55,7 +55,14 @@ void palloc_init(size_t user_page_limit) {
     otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
     then the pages are filled with zeros.  If too few pages are
     available, returns a null pointer, unless PAL_ASSERT is set in
-    FLAGS, in which case the kernel panics. */
+    FLAGS, in which case the kernel panics.
+
+    If too few pages are available and PAL_USER is set, then first try to
+    evict pages before returning NULL or panicing.
+
+    If PAL_USER is set, then the frame table entries corresponding to the
+    new pages have their kernal_vaddr fields set, and all other fields
+    cleared.*/
 void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
     void *pages;
@@ -89,9 +96,6 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
             memset(pages, 0, PGSIZE * page_cnt);
         }
         if (flags & PAL_USER) {
-            // TODO(agf): I sort of want to lock this until the pages get
-            // mapped into user memory, but I can avoid this by not evicting
-            // pages that have user_vaddr == NULL in their frame table.
             ft_init_entries(pages, page_cnt);
         }
     }
