@@ -621,10 +621,14 @@ static bool setup_stack(void **esp) {
 // Gets a frame from the user pool, fills it with zeros, and installs it in
 // the user virtual address mapping at the address indicated by |upage| (with
 // appropriate alignment; |upage| is rounded down).
-bool allocate_and_install_blank_page(void *upage) {
+bool allocate_and_install_blank_page(void *upage, bool pin) {
     void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kpage == NULL) {
         return false;
+    }
+    if (pin) {
+        bool acquired = lock_try_acquire(&ft_lookup(kpage)->lock);
+        ASSERT(acquired);
     }
     bool install_success = install_page(pg_round_down(upage), kpage, true);
     if (!install_success) {

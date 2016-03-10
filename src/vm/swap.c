@@ -15,15 +15,11 @@ static struct swapt_entry * swapt;
 static struct lock swap_block_lock;
 
 static void swap_lock_acquire(void) {
-    /// printf("AGF: Thread %p trying to acquire swap lock\n", thread_current());
     lock_acquire(&swap_block_lock);
-    /// printf("AGF: Thread %p acquired swap lock\n", thread_current());
 }
 
 static void swap_lock_release(void) {
-    /// printf("AGF: Thread %p trying to release swap lock\n", thread_current());
     lock_release(&swap_block_lock);
-    /// printf("AGF: Thread %p released swap lock\n", thread_current());
 }
 
 void swap_init(void) {
@@ -44,7 +40,6 @@ void swap_init(void) {
 // Write a page from buffer into swap.
 // buffer must be page-aligned.
 void swap_write_page(int swap_page_number, const char *buffer) {
-    /// printf("AGF: Thread %p beginning swap_write\n", thread_current());
     swap_lock_acquire();
     bool already_held = filesys_lock_held();
     ASSERT(!already_held);
@@ -64,13 +59,11 @@ void swap_write_page(int swap_page_number, const char *buffer) {
         filesys_lock_release();
     }
     swap_lock_release();
-    /// printf("AGF: Thread %p ending swap_write\n", thread_current());
 }
 
 // Read a page from swap into buffer.
 // Buffer is rounded down to the nearest page boundary.
 void swap_read_page(int swap_page_number, char *buffer) {
-    /// printf("AGF: Thread %p beginning swap_read\n", thread_current());
     swap_lock_acquire();
     bool already_held = filesys_lock_held();
     ASSERT(!already_held);
@@ -92,7 +85,6 @@ void swap_read_page(int swap_page_number, char *buffer) {
         filesys_lock_release();
     }
     swap_lock_release();
-    /// printf("AGF: Thread %p ending swap_read\n", thread_current());
 }
 
 // Returns a free swap slot number, or -1 if there are no free slots

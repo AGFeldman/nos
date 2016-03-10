@@ -11,6 +11,7 @@
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/frame.h"
 
 // Page size, in bytes.
 // This seems like it should be defined elsewhere, but apparently is not.
@@ -42,12 +43,6 @@ void syscall_init(void) {
 }
 
 void filesys_lock_acquire(void) {
-    /// printf("AGF: thread %p trying to acquire filesys lock\n", thread_current());
-    /// lock_acquire(&filesys_lock);
-    /// printf("AGF: thread %p acquired filesys lock\n", thread_current());
-}
-
-void filesys2_lock_acquire(void) {
     lock_acquire(&filesys_lock);
 }
 
@@ -56,12 +51,6 @@ bool filesys_lock_held(void) {
 }
 
 void filesys_lock_release(void) {
-    /// printf("AGF: thread %p trying to release filesys lock\n", thread_current());
-    /// lock_release(&filesys_lock);
-    /// printf("AGF: thread %p released filesys lock\n", thread_current());
-}
-
-void filesys2_lock_release(void) {
     lock_release(&filesys_lock);
 }
 
@@ -82,10 +71,25 @@ void check_pointer_validity(void *p, struct intr_frame *f) {
         // This stack access might cause a page fault, which is fine; the page
         // fault handler will grow the stack if needed.
     }
-    uint32_t *pd = thread_current()->pagedir;
+    struct thread * cur_thread = thread_current();
+    uint32_t *pd = cur_thread->pagedir;
+    // TODO(agf): A lot of this is repeated in the page fault handler
     if (pagedir_get_page(pd, p) == NULL && spt_entry_lookup(p, NULL) == NULL) {
         if (user_stack) {
-            if (allocate_and_install_blank_page(p)) {
+            bool pin = false;
+            if (cur_thread->pin_begin_page != NULL) {
+                ASSERT(cur_thread->pin_end_page != NULL);
+                ASSERT(pg_round_down(cur_thread->pin_begin_page) ==
+                       cur_thread->pin_begin_page);
+                ASSERT(pg_round_down(cur_thread->pin_end_page) ==
+                       cur_thread->pin_end_page);
+                unsigned char * round_addr = pg_round_down(p);
+                if (round_addr >= cur_thread->pin_begin_page &&
+                    round_addr <= cur_thread->pin_end_page) {
+                    pin = true;
+                }
+            }
+            if (allocate_and_install_blank_page(p, pin)) {
                 return;
             }
         }
@@ -276,10 +280,11 @@ void sys_read(struct intr_frame *f) {
         if (!afile) {
             sys_exit_helper(-1);
         }
+        pin_pages_by_buffer(buf, n);
         filesys_lock_acquire();
-        // TODO(agf): Pin this!
         f->eax = file_read(afile, buf, n);
         filesys_lock_release();
+        unpin_pages_by_buffer(buf, n);
     }
 }
 
@@ -305,9 +310,11 @@ void sys_write(struct intr_frame *f) {
         struct thread *intr_trd = thread_current();
         /* Subtract 2 because fd 0 and 1 are taken for IO */
         struct file *afile = intr_trd->open_files[fd - 2];
+        pin_pages_by_buffer(buf, n);
         filesys_lock_acquire();
         f->eax = file_write(afile, buf, n);
         filesys_lock_release();
+        unpin_pages_by_buffer(buf, n);
     }
 }
 

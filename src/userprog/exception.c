@@ -143,6 +143,21 @@ static void page_fault(struct intr_frame *f) {
     // TODO(agf)
     // user = (f->error_code & PF_U) != 0;
 
+    struct thread * cur_thread = thread_current();
+    bool pin = false;
+    if (cur_thread->pin_begin_page != NULL) {
+        ASSERT(cur_thread->pin_end_page != NULL);
+        ASSERT(pg_round_down(cur_thread->pin_begin_page) ==
+               cur_thread->pin_begin_page);
+        ASSERT(pg_round_down(cur_thread->pin_end_page) ==
+               cur_thread->pin_end_page);
+        unsigned char * round_fault_addr = pg_round_down(fault_addr);
+        if (round_fault_addr >= cur_thread->pin_begin_page &&
+            round_fault_addr <= cur_thread->pin_end_page) {
+            pin = true;
+        }
+    }
+
     // Load from Supplemental Page Table, if possible
     if (not_present) {
         struct spt_entry * spte = spt_entry_lookup(fault_addr, NULL);
@@ -151,7 +166,7 @@ static void page_fault(struct intr_frame *f) {
             // But interrupt handlers should not wait on locks :(
             // Instead, pinning something might provide the answer...
             ASSERT(spte->key.addr == pg_round_down(fault_addr));
-            ASSERT(spte->trd == thread_current());
+            ASSERT(spte->trd == cur_thread);
             if (spte->file != NULL && (!write || spte->writable)) {
                 // We were trying to read from an executable file.
                 // We weren't trying to write to a read-only page, and we
@@ -160,7 +175,7 @@ static void page_fault(struct intr_frame *f) {
                 // time that an executable page gets loaded.
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
-                if (load_page_from_spte(spte, false)) {
+                if (load_page_from_spte(spte, pin)) {
                     return;
                 }
             }
@@ -168,6 +183,10 @@ static void page_fault(struct intr_frame *f) {
                 // Obtain a free page and map it into memory.
                 // pagedir_set_page() updates the frame table entry.
                 uint8_t *kpage = palloc_get_page(PAL_USER);
+                if (pin) {
+                    bool acquired = lock_try_acquire(&ft_lookup(kpage)->lock);
+                    ASSERT(acquired);
+                }
                 // TODO(agf): Make the page read-only if needed
                 ASSERT(spte->trd->pagedir != NULL);
                 bool result = pagedir_set_page(spte->trd->pagedir,
@@ -192,7 +211,7 @@ static void page_fault(struct intr_frame *f) {
     if (fault_addr != NULL && is_user_vaddr(fault_addr) &&
         fault_addr >= (void *)((uint8_t *) f->esp - 32) &&
         fault_addr >= PHYS_BASE - 2048 * PGSIZE) {
-        if (allocate_and_install_blank_page(fault_addr)) {
+        if (allocate_and_install_blank_page(fault_addr, pin)) {
             return;
         }
     }

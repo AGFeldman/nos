@@ -39,15 +39,11 @@ bool eviction_lock_held(void) {
 }
 
 void eviction_lock_acquire(void) {
-    /// printf("AGF: Thread %p trying to acquire eviction lock\n", thread_current());
     lock_acquire(&eviction_lock);
-    /// printf("AGF: Thread %p acquired eviction lock\n", thread_current());
 }
 
 void eviction_lock_release(void) {
-    /// printf("AGF: Thread %p trying to release eviction lock\n", thread_current());
     lock_release(&eviction_lock);
-    /// printf("AGF: Thread %p released eviction lock\n", thread_current());
 }
 
 void frame_table_init(void) {
@@ -79,7 +75,6 @@ struct ft_entry * ft_lookup(void *kernel_vaddr) {
 }
 
 void ft_add_user_mapping(void *upage, void *kpage, struct thread * trd) {
-    /// printf("AGF: Thread %p adding user mapping\n", thread_current());
     if (trd == NULL) {
         trd = thread_current();
     }
@@ -93,7 +88,6 @@ void ft_add_user_mapping(void *upage, void *kpage, struct thread * trd) {
     entry->kernel_vaddr = kpage;
     entry->user_vaddr = upage;
     entry->trd = trd;
-    ///printf("AGF: Thread %p added user mapping\n", thread_current());
 }
 
 // TODO(agf): Rename to something like set_kernel_vaddr()
@@ -180,11 +174,14 @@ void * frame_evict(size_t page_cnt) {
                 }
             }
             if (!fte->acquired_during_eviction) {
-                bool acquired = lock_try_acquire(&fte->lock);
-                if (acquired) {
-                    fte->acquired_during_eviction = true;
-                } else {
-                    can_evict = false;
+                // TODO(agf): This is racy. This is a big problem.
+                if (!lock_held_by_current_thread(&fte->lock)) {
+                    bool acquired = lock_try_acquire(&fte->lock);
+                    if (acquired) {
+                        fte->acquired_during_eviction = true;
+                    } else {
+                        can_evict = false;
+                    }
                 }
             }
         }
@@ -240,111 +237,66 @@ void * frame_evict(size_t page_cnt) {
     return kernel_vaddr;
 }
 
-// TODO(agf): Want a function that pins a section of memory
-// But, might not have that memory yet. How to make sure that it is pinned
-// when I get it?
-// This is fine. frame_evict() and palloc both clear the uservaddr, and eviction
-// does not happen unless uservaddr is set. So, you have time to pin it before
-// you install it.
-// TODO(agf): What if the page that you are trying to pin already exits in
-// physical memory? That is why we pin with a lock. Eviction should try to
-// acquire this lock, and move on to another frame if it can't.
 void pin_pages(unsigned char * uaddr, size_t num_pages) {
     ASSERT(is_user_vaddr(uaddr));
     ASSERT(pg_round_down(uaddr) == uaddr);
-    struct thread * trd = thread_current();
-    uint32_t * pagedir = trd->pagedir;
-    size_t i;
-    for (i = 0; i < num_pages; i++) {
-        unsigned char * cur_uaddr = uaddr + i * PGSIZE;
-        // If the page is already in a frame, we don't want it to get evicted
-        // before we can pin it.
-        eviction_lock_acquire();
-        void * cur_kaddr = pagedir_get_page(pagedir, cur_uaddr);
-        if (cur_kaddr != NULL) {
-            // Pin the page
-            bool success = lock_try_acquire(&ft_lookup(cur_kaddr)->lock);
-            ASSERT(success);
-            eviction_lock_release();
+    ASSERT(num_pages > 0);
+    bool need_pgfault_handler = false;
+    size_t i = 0;
+    struct thread * cur_thread = thread_current();
+    uint32_t * pagedir = cur_thread->pagedir;
+    eviction_lock_acquire();
+    for (; i < num_pages; i++) {
+        void * kaddr = pagedir_get_page(pagedir, uaddr + i * PGSIZE);
+        if (kaddr == NULL) {
+            need_pgfault_handler = true;
         } else {
-            // Page is not already in a frame, so we might need to perform
-            // eviction to get it in the frame.
-            eviction_lock_release();
-            // TODO(agf): This is almost the same code as in the page-fault
-            // handler, so we need a major refactor.
-            struct spt_entry * spte = spt_entry_lookup(cur_uaddr, &trd->spt);
-            ASSERT(spte != NULL);
-            // TODO(agf): Maybe spte is null if we are trying to grow the
-            // user stack and have it pinned.
-            if (spte->file != NULL) {
-                // We were trying to read from an executable file.
-                // We weren't trying to write to a read-only page, and we
-                // successfully loaded that page into memory from file.
-                // Frame is pinned by load_page_from_spte().
-                bool success = load_page_from_spte(spte, true);
-                ASSERT(success);
-            } else {
-                // Else, assume that we are trying to laod from swap.
-                ASSERT(spte->swap_page_number != -1);
-                // Obtain a free page and map it into memory.
-                // pagedir_set_page() updates the frame table entry.
-                uint8_t *kpage = palloc_get_page(PAL_USER);
-                // Pin it!
-                bool success = lock_try_acquire(&ft_lookup(kpage)->lock);
-                ASSERT(success);
-                // TODO(agf): Make the page read-only if needed
-                ASSERT(spte->trd->pagedir != NULL);
-                success = pagedir_set_page(spte->trd->pagedir,
-                                           spte->key.addr, kpage, true);
-                ASSERT(success);
-                // Read page from swap
-                // TODO(agf): Shouldn't need this
-                // Perhaps pin the page at key.addr instead
-                eviction_lock_acquire();
-                swap_read_page(spte->swap_page_number, spte->key.addr);
-                eviction_lock_release();
-                // Free the swap slot
-                mark_slot_unused(spte->swap_page_number);
-                // TODO(agf): Update the SPT entry?
-            }
+            bool acquired = lock_try_acquire(&ft_lookup(kaddr)->lock);
+            ASSERT(acquired);
+        }
+        if (need_pgfault_handler) {
+            cur_thread->pin_begin_page = uaddr;
+            cur_thread->pin_end_page = uaddr + (num_pages - 1) * PGSIZE;
         }
     }
+    eviction_lock_release();
+    if (need_pgfault_handler) {
+        // The messy code with "throwaway" is intended to force the compiler
+        // to perform a pointer dereference, which causes a pagefault.
+        unsigned char volatile throwaway = 0;
+        for (i = 0; i < num_pages; i++) {
+            throwaway = *((unsigned char *)(uaddr + i * PGSIZE));
+            if (throwaway == 0) {
+                throwaway += 1;
+            }
+            // Use throwaway to assert something that is always true so that
+            // the compiler does not get rid of throwaway.
+            ASSERT(throwaway >= 1);
+        }
+    }
+    cur_thread->pin_begin_page = NULL;
+    cur_thread->pin_end_page = NULL;
 }
 
 void unpin_pages(unsigned char * uaddr, size_t num_pages) {
     ASSERT(is_user_vaddr(uaddr));
     ASSERT(pg_round_down(uaddr) == uaddr);
-    struct thread * trd = thread_current();
-    uint32_t * pagedir = trd->pagedir;
+    uint32_t * pagedir = thread_current()->pagedir;
     size_t i;
     for (i = 0; i < num_pages; i++) {
-        unsigned char * cur_uaddr = uaddr + i * PGSIZE;
-        void * cur_kaddr = pagedir_get_page(pagedir, cur_uaddr);
-        ASSERT(cur_kaddr != NULL);
-        struct ft_entry * fte = ft_lookup(cur_kaddr);
-        ASSERT(lock_held_by_current_thread(&fte->lock));
-        ASSERT(!fte->acquired_during_eviction);
-        lock_release(&fte->lock);
+        void * kaddr = pagedir_get_page(pagedir, uaddr + i * PGSIZE);
+        ASSERT(kaddr != NULL);
+        lock_release(&ft_lookup(kaddr)->lock);
     }
 }
 
 void pin_pages_by_buffer(unsigned char * buffer, off_t num_bytes) {
     unsigned char * start = pg_round_down(buffer);
-    int num_pages = 1;
-    off_t num_bytes_accounted_for = PGSIZE - (buffer - start);
-    num_pages += num_bytes_accounted_for / num_bytes;
-    if (num_bytes_accounted_for % num_bytes != 0) {
-        num_pages++;
-    }
+    int num_pages = pg_no(buffer + num_bytes) - pg_no(buffer) + 1;
     pin_pages(start, num_pages);
 }
 void unpin_pages_by_buffer(unsigned char * buffer, off_t num_bytes) {
     unsigned char * start = pg_round_down(buffer);
-    int num_pages = 1;
-    off_t num_bytes_accounted_for = PGSIZE - (buffer - start);
-    num_pages += num_bytes_accounted_for / num_bytes;
-    if (num_bytes_accounted_for % num_bytes != 0) {
-        num_pages++;
-    }
+    int num_pages = pg_no(buffer + num_bytes) - pg_no(buffer) + 1;
     unpin_pages(start, num_pages);
 }

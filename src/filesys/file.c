@@ -14,7 +14,6 @@ struct file {
     and returns the new file.  Returns a null pointer if an
     allocation fails or if INODE is null. */
 struct file * file_open(struct inode *inode) {
-    // TODO(agf): Might need filesys_lock_acquire right after calloc
     struct file *file = calloc(1, sizeof *file);
     if (inode != NULL && file != NULL) {
         file->inode = inode;
@@ -54,7 +53,6 @@ struct inode * file_get_inode(struct file *file) {
     than SIZE if end of file is reached.  Advances FILE's position by the
     number of bytes read. */
 off_t file_read(struct file *file, void *buffer, off_t size) {
-    // TODO(agf): Pin the |size| pages from buffer, then filesys_lock_acquire
     off_t bytes_read = inode_read_at(file->inode, buffer, size, file->pos);
     file->pos += bytes_read;
     return bytes_read;
@@ -66,7 +64,6 @@ off_t file_read(struct file *file, void *buffer, off_t size) {
     unaffected. */
 off_t file_read_at(struct file *file, void *buffer, off_t size,
                    off_t file_ofs) {
-    // TODO(agf): Pin the |size| pages from buffer, then filesys_lock_acquire
     return inode_read_at(file->inode, buffer, size, file_ofs);
 }
 
@@ -76,7 +73,6 @@ off_t file_read_at(struct file *file, void *buffer, off_t size,
     case, but file growth is not yet implemented.)
     Advances FILE's position by the number of bytes read. */
 off_t file_write(struct file *file, const void *buffer, off_t size) {
-    // TODO(agf): Pin the |size| pages from buffer, then filesys_lock_acquire
     off_t bytes_written = inode_write_at(file->inode, buffer, size, file->pos);
     file->pos += bytes_written;
     return bytes_written;

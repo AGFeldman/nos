@@ -66,9 +66,6 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
 
     lock_acquire(&pool->lock);
     page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
-    // If we get memory from palloc, and don't map it yet, then it won't
-    // get evicted.
-    // Because user_vaddr won't be set!
     lock_release(&pool->lock);
 
     if (page_idx != BITMAP_ERROR) {
@@ -76,8 +73,6 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
     }
     else {
         if (flags & PAL_USER) {
-            // TODO(agf): frame_evict() should take the number of pages as
-            // an argument! We need this number of contiguous pages
             pages = frame_evict(page_cnt);
             ASSERT(pages != NULL);
         }

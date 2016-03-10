@@ -6,9 +6,6 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
-#include "threads/vaddr.h"
-#include "userprog/syscall.h"
-#include "vm/frame.h"
 
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -174,12 +171,6 @@ void inode_remove(struct inode *inode) {
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
 off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset) {
-    off_t orig_size = size;
-    void * orig_buffer = buffer_;
-    if (is_user_vaddr(orig_buffer)) {
-        pin_pages_by_buffer(orig_buffer, orig_size);
-    }
-    filesys2_lock_acquire();
     uint8_t *buffer = buffer_;
     off_t bytes_read = 0;
     uint8_t *bounce = NULL;
@@ -222,10 +213,6 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     }
     free(bounce);
 
-    filesys2_lock_release();
-    if (is_user_vaddr(orig_buffer)) {
-        unpin_pages_by_buffer(orig_buffer, orig_size);
-    }
     return bytes_read;
 }
 
@@ -235,12 +222,6 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     (Normally a write at end of file would extend the inode, but
     growth is not yet implemented.) */
 off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t offset) {
-    off_t orig_size = size;
-    void * orig_buffer = buffer_;
-    if (is_user_vaddr(orig_buffer)) {
-        pin_pages_by_buffer(orig_buffer, orig_size);
-    }
-    filesys2_lock_acquire();
     const uint8_t *buffer = buffer_;
     off_t bytes_written = 0;
     uint8_t *bounce = NULL;
@@ -295,10 +276,6 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
     }
     free(bounce);
 
-    filesys2_lock_release();
-    if (is_user_vaddr(orig_buffer)) {
-        unpin_pages_by_buffer(orig_buffer, orig_size);
-    }
     return bytes_written;
 }
 
