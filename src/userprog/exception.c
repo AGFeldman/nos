@@ -117,6 +117,7 @@ static void kill(struct intr_frame *f) {
     description of "Interrupt 14--Page Fault Exception (#PF)" in
     [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame *f) {
+// printf("page_fault\n");
     bool not_present;  /* True: not-present page, false: writing r/o page. */
     bool write;        /* True: access was write, false: access was read. */
     // TODO(agf)
@@ -129,7 +130,7 @@ static void page_fault(struct intr_frame *f) {
      * See [IA32-v2a] "MOV--Move to/from Control Registers" and
      * [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception (#PF)". */
     asm ("movl %%cr2, %0" : "=r" (fault_addr));
-
+// printf("fault_addr = %p\n", fault_addr);
     /* Turn interrupts back on (they were only off so that we could
        be assured of reading CR2 before it changed). */
     intr_enable();
@@ -160,6 +161,7 @@ static void page_fault(struct intr_frame *f) {
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
                 if (load_page_from_spte(spte)) {
+// printf("done page-fault\n");
                     return;
                 }
             }
@@ -177,6 +179,7 @@ static void page_fault(struct intr_frame *f) {
                 // Free the swap slot
                 mark_slot_unused(spte->swap_page_number);
                 // TODO(agf): Update the SPT entry?
+// printf("done page faulting\n");
                 return;
             }
         }
