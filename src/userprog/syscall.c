@@ -169,11 +169,16 @@ static bool sys_munmap_helper(mapid_t mapping) {
         }
         if (entry->mmapid == mapping && mapping != 0) {
             if (pagedir_is_dirty(thread_current()->pagedir, entry->key.addr)) {
-                filesys_lock_acquire();
-                ASSERT(entry->file != NULL);
-                file_write_at(entry->file, entry->key.addr, entry->file_read_bytes,
-                              entry->file_ofs);
-                filesys_lock_release();
+                // TODO(agf): Should not need this `if` statement. mmapid != 0
+                // should mean that file != NULL.
+                // But we do need this `if` statement, probably because
+                // mmap updates to entry fields are getting interrupted.
+                if (entry->file != NULL) {
+                    filesys_lock_acquire();
+                    file_write_at(entry->file, entry->key.addr,
+                                  entry->file_read_bytes, entry->file_ofs);
+                    filesys_lock_release();
+                }
             }
             file = entry->file;
             entry->file = NULL;
