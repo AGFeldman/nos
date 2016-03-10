@@ -548,7 +548,9 @@ static bool load_segment_lazy(struct file *file, off_t ofs, uint8_t *upage,
 // the data from that page of the file into the new page of memory, and
 // map the memory into the user's address space. If all this was successful,
 // return true. Otherwise, return false.
-bool load_page_from_spte(struct spt_entry *spte) {
+// If pinned is true, then the loaded page is pinned in physical memory before
+// it is mapped into physical memory.
+bool load_page_from_spte(struct spt_entry *spte, bool pin) {
     if (spte == NULL || spte->file == NULL) {
         return false;
     }
@@ -583,9 +585,17 @@ bool load_page_from_spte(struct spt_entry *spte) {
     }
     size_t spte_zero_bytes = PGSIZE - spte->file_read_bytes;
     memset(kpage + spte->file_read_bytes, 0, spte_zero_bytes);
+
+    if (pin) {
+        // Pin the page in physical memory before installing it in userspace
+        bool acquired = lock_try_acquire(&ft_lookup(kpage)->lock);
+        ASSERT(acquired);
+    }
+
     // Add the page to the process's address space
     if (!install_page(spte->key.addr, kpage, spte->writable)) {
         palloc_free_page(kpage);
+        // TODO(agf): Also unpin it
         return false;
     }
     return true;

@@ -42,9 +42,13 @@ void syscall_init(void) {
 }
 
 void filesys_lock_acquire(void) {
-    printf("AGF: thread %p trying to acquire filesys lock\n", thread_current());
+    /// printf("AGF: thread %p trying to acquire filesys lock\n", thread_current());
+    /// lock_acquire(&filesys_lock);
+    /// printf("AGF: thread %p acquired filesys lock\n", thread_current());
+}
+
+void filesys2_lock_acquire(void) {
     lock_acquire(&filesys_lock);
-    printf("AGF: thread %p acquired filesys lock\n", thread_current());
 }
 
 bool filesys_lock_held(void) {
@@ -52,9 +56,13 @@ bool filesys_lock_held(void) {
 }
 
 void filesys_lock_release(void) {
-    printf("AGF: thread %p trying to release filesys lock\n", thread_current());
+    /// printf("AGF: thread %p trying to release filesys lock\n", thread_current());
+    /// lock_release(&filesys_lock);
+    /// printf("AGF: thread %p released filesys lock\n", thread_current());
+}
+
+void filesys2_lock_release(void) {
     lock_release(&filesys_lock);
-    printf("AGF: thread %p released filesys lock\n", thread_current());
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
@@ -64,6 +72,7 @@ void check_pointer_validity(void *p, struct intr_frame *f) {
     }
     bool user_stack = false;
     // TODO(agf): Document max stack size of 2048 * PGSIZE
+    // TODO(agf): This is very similar to the code in the pagefault handler
     if (p >= (void *)((uint8_t *) f->esp - 32) &&
             p >= PHYS_BASE - 2048 * PGSIZE) {
         user_stack = true;

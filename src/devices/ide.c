@@ -319,7 +319,6 @@ static char * descramble_ata_string(char *string, int size) {
     BLOCK_SECTOR_SIZE bytes.  Internally synchronizes accesses to disks,
     so external per-disk locking is unneeded. */
 static void ide_read(void *d_, block_sector_t sec_no, void *buffer) {
-    // printf("AGF: Thread %p: This is an ide_read\n", thread_current());
     struct ata_disk *d = d_;
     struct channel *c = d->channel;
     lock_acquire(&c->lock);

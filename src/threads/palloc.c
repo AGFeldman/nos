@@ -66,6 +66,9 @@ void * palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
 
     lock_acquire(&pool->lock);
     page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
+    // If we get memory from palloc, and don't map it yet, then it won't
+    // get evicted.
+    // Because user_vaddr won't be set!
     lock_release(&pool->lock);
 
     if (page_idx != BITMAP_ERROR) {

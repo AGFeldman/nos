@@ -6,6 +6,9 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
+#include "userprog/syscall.h"
+#include "vm/frame.h"
 
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -81,11 +84,11 @@ bool inode_create(block_sector_t sector, off_t length) {
             if (sectors > 0) {
                 static char zeros[BLOCK_SECTOR_SIZE];
                 size_t i;
-              
-                for (i = 0; i < sectors; i++) 
+
+                for (i = 0; i < sectors; i++)
                     block_write(fs_device, disk_inode->start + i, zeros);
             }
-            success = true; 
+            success = true;
         }
         free(disk_inode);
     }
@@ -105,7 +108,7 @@ struct inode * inode_open(block_sector_t sector) {
         inode = list_entry(e, struct inode, elem);
         if (inode->sector == sector) {
             inode_reopen(inode);
-            return inode; 
+            return inode;
         }
     }
 
@@ -148,15 +151,15 @@ void inode_close(struct inode *inode) {
     if (--inode->open_cnt == 0) {
         /* Remove from inode list and release lock. */
         list_remove(&inode->elem);
- 
+
         /* Deallocate blocks if removed. */
         if (inode->removed) {
             free_map_release(inode->sector, 1);
             free_map_release(inode->data.start,
-                             bytes_to_sectors(inode->data.length)); 
+                             bytes_to_sectors(inode->data.length));
         }
 
-        free(inode); 
+        free(inode);
     }
 }
 
@@ -171,6 +174,12 @@ void inode_remove(struct inode *inode) {
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
 off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset) {
+    off_t orig_size = size;
+    void * orig_buffer = buffer_;
+    if (is_user_vaddr(orig_buffer)) {
+        pin_pages_by_buffer(orig_buffer, orig_size);
+    }
+    filesys2_lock_acquire();
     uint8_t *buffer = buffer_;
     off_t bytes_read = 0;
     uint8_t *bounce = NULL;
@@ -205,7 +214,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
             block_read(fs_device, sector_idx, bounce);
             memcpy(buffer + bytes_read, bounce + sector_ofs, chunk_size);
         }
-      
+
         /* Advance. */
         size -= chunk_size;
         offset += chunk_size;
@@ -213,6 +222,10 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     }
     free(bounce);
 
+    filesys2_lock_release();
+    if (is_user_vaddr(orig_buffer)) {
+        unpin_pages_by_buffer(orig_buffer, orig_size);
+    }
     return bytes_read;
 }
 
@@ -222,6 +235,12 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     (Normally a write at end of file would extend the inode, but
     growth is not yet implemented.) */
 off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t offset) {
+    off_t orig_size = size;
+    void * orig_buffer = buffer_;
+    if (is_user_vaddr(orig_buffer)) {
+        pin_pages_by_buffer(orig_buffer, orig_size);
+    }
+    filesys2_lock_acquire();
     const uint8_t *buffer = buffer_;
     off_t bytes_written = 0;
     uint8_t *bounce = NULL;
@@ -260,7 +279,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
                we're writing, then we need to read in the sector
                first.  Otherwise we start with a sector of all zeros. */
 
-            if (sector_ofs > 0 || chunk_size < sector_left) 
+            if (sector_ofs > 0 || chunk_size < sector_left)
                 block_read(fs_device, sector_idx, bounce);
             else
                 memset (bounce, 0, BLOCK_SECTOR_SIZE);
@@ -276,6 +295,10 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
     }
     free(bounce);
 
+    filesys2_lock_release();
+    if (is_user_vaddr(orig_buffer)) {
+        unpin_pages_by_buffer(orig_buffer, orig_size);
+    }
     return bytes_written;
 }
 

@@ -160,7 +160,7 @@ static void page_fault(struct intr_frame *f) {
                 // time that an executable page gets loaded.
                 // TODO(agf): Rename load_page_from_spte() to indicate that
                 // it is only for executables.
-                if (load_page_from_spte(spte)) {
+                if (load_page_from_spte(spte, false)) {
                     return;
                 }
             }
@@ -172,9 +172,10 @@ static void page_fault(struct intr_frame *f) {
                 ASSERT(spte->trd->pagedir != NULL);
                 bool result = pagedir_set_page(spte->trd->pagedir,
                                                spte->key.addr, kpage, true);
-                ASSERT(result == true);
+                ASSERT(result);
                 // Read page from swap
                 // TODO(agf): Shouldn't need this
+                // Perhaps pin the page at key.addr instead
                 eviction_lock_acquire();
                 swap_read_page(spte->swap_page_number, spte->key.addr);
                 eviction_lock_release();

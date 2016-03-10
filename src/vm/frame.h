@@ -1,6 +1,7 @@
 #ifndef VM_FRAME_H
 #define VM_FRAME_H
 
+#include "filesys/off_t.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "threads/loader.h"
@@ -15,6 +16,7 @@ struct ft_entry {
     // Thread associated with this user address
     struct thread * trd;
     struct lock lock;
+    bool acquired_during_eviction;
 };
 
 bool eviction_lock_held(void);
@@ -38,5 +40,13 @@ void ft_deinit_entry(void *);
 void ft_deinit_entries(void *, size_t);
 
 void * frame_evict(size_t);
+
+void pin_pages(unsigned char *, size_t);
+
+void unpin_pages(unsigned char *, size_t);
+
+void pin_pages_by_buffer(unsigned char *, off_t);
+
+void unpin_pages_by_buffer(unsigned char *, off_t);
 
 #endif  // vm/frame.h
