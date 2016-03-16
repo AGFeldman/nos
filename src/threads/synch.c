@@ -388,3 +388,60 @@ void cond_broadcast(struct condition *cond, struct lock *lock) {
         cond_signal(cond, lock);
 }
 
+/*! Initializes a read-write lock. */
+void rwlock_init(struct rwlock *rwlock) {
+    lock_init(&rwlock->mutex);
+    cond_init(&rwlock->can_read);
+    cond_init(&rwlock->can_write);
+}
+
+/*! Acquires read privileges on a read-write lock, sleeping until it becomes
+    available if necessary. */
+void rwlock_racquire(struct rwlock *rwlock) {
+    ASSERT(lock != NULL);
+    ASSERT(!intr_context());
+    lock_acquire(&rwlock->mutex);
+    while (rwlock->writing) {
+        cond_wait(&rwlock->can_read, &rwlock->mutex);
+    }
+    rwlock->nreaders++;
+    lock_release(&rwlock->mutex);
+}
+
+/*! Decrements the number of readers that hold a read-write lock. */
+void rwlock_rrelease(struct rwlock *rwlock) {
+    ASSERT(rwlock != NULL);
+    ASSERT(rwlock->nreaders > 0);
+    lock_acquire(&rwlock->mutex);
+    rwlock->nreaders--;
+    if (rwlock->nreaders == 0) {
+        cond_signal(&can_write, &rwlock->mutex);
+    }
+    lock_release(&rwlock->mutex);
+}
+
+/*! Acquires write privileges on a read-write lock, sleeping until it becomes
+    available if necessary. */
+void rwlock_wacquire(struct rwlock *rwlock) {
+    ASSERT(lock != NULL);
+    ASSERT(!intr_context());
+
+    lock_acquire(&rwlock->mutex);
+    while (rwlock->writing || rwlock->nreaders > 0) {
+        cond_wait(&rwlock->can_write, &rwlock->mutex);
+    }
+    rwlock->writing = true;
+    lock_release(&rwlock->mutex);
+}
+
+/*! Releases write privileges on a read-write lock. This wakes up all waiting
+    readers and up to one waiting writer. */
+void rwlock_wrelease(struct rwlock *rwlock) {
+    ASSERT(rwlock != NULL);
+    ASSERT(rwlock->writing);
+    lock_acquire(&rwlock->mutex);
+    rwlock->writing = false;
+    cond_broadcast(&can_read, &rwlock->mutex);
+    cond_signal(&can_write, &rwlock->mutex);
+    lock_release(&rwlock->mutex);
+}

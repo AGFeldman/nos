@@ -55,5 +55,18 @@ void cond_broadcast(struct condition *, struct lock *);
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
+/*! Read-write lock. */
+struct rwlock {
+    struct lock mutex;
+    struct condition can_read;
+    struct condition can_write;
+}
+
+void rwlock_init(struct rwlock *);
+void rwlock_racquire(struct rwlock *);
+void rwlock_rrelease(struct rwlock *);
+void rwlock_wacquire(struct rwlock *);
+void rwlock_wrelease(struct rwlock *);
+
 #endif /* threads/synch.h */
 
