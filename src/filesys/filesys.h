@@ -9,8 +9,11 @@
 #define ROOT_DIR_SECTOR 1       /*!< Root directory file inode sector. */
 /*! @} */
 
+#define NUM_CACHE_BLOCKS 64
+
 // Buffer cache block
 struct bc_block {
+    bool occupied;
     bool used;
     block_sector_t block_num;
     uint32_t data[BLOCK_SECTOR_SIZE];

@@ -86,5 +86,11 @@ static void do_format(void) {
 }
 
 struct bc_block * bc_init(void) {
-
+    struct bc_block * bc = (struct bc_block *) malloc(NUM_CACHE_BLOCKS *
+                                                      sizeof(struct bc_block));
+    size_t i;
+    for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
+        struct bc_block * block = bc + i;
+        block->occupied = false;
+    }
 }
