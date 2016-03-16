@@ -11,9 +11,9 @@ struct bc_block * hand;
 struct block * filesys_block;
 
 static void read_ahead(block_sector_t);
-static thread_func * read_ahead_helper(void *);
+static thread_func read_ahead_helper;
 static void write_behind(void);
-static thread_func * write_behind_helper(void);
+static thread_func write_behind_helper;
 
 // TODO: call from thread
 void bc_init(void) {
@@ -128,7 +128,7 @@ static void read_ahead(block_sector_t sector) {
     ASSERT(tid != TID_ERROR);
 }
 
-static thread_func * read_ahead_helper(void * aux) {
+static void read_ahead_helper(void * aux) {
     block_sector_t sector = (block_sector_t) aux;
     // TODO(agf): Fetch into filesystem cache
 }
@@ -139,7 +139,7 @@ static void write_behind(void) {
     ASSERT(tid != TID_ERROR);
 }
 
-static thread_func * write_behind_helper(void) {
+static void write_behind_helper(void * aux UNUSED) {
     while(true) {
         // TODO: no idea what a reasonable sleep time is
         timer_sleep(1000);
