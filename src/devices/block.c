@@ -98,6 +98,10 @@ static void check_sector(struct block *block, block_sector_t sector) {
     Internally synchronizes accesses to block devices, so external
     per-block device locking is unneeded. */
 void block_read(struct block *block, block_sector_t sector, void *buffer) {
+    // // TODO(agf): Use something like this to intercept reads
+    // if (block == block_get_role(BLOCK_FILESYS)) {
+    //     // Intercept read
+    // }
     check_sector(block, sector);
     block->ops->read(block->aux, sector, buffer);
     block->read_cnt++;
@@ -110,6 +114,10 @@ void block_read(struct block *block, block_sector_t sector, void *buffer) {
     per-block device locking is unneeded. */
 void block_write(struct block *block, block_sector_t sector,
                  const void *buffer) {
+    // // TODO(agf): Use something like this to intercept writes
+    // if (block == block_get_role(BLOCK_FILESYS)) {
+    //     // Intercept write
+    // }
     check_sector(block, sector);
     ASSERT(block->type != BLOCK_FOREIGN);
     block->ops->write(block->aux, sector, buffer);
