@@ -151,8 +151,8 @@ static void write_behind(void) {
 
 static void write_behind_helper(void * aux UNUSED) {
     while(true) {
-        // TODO: no idea what a reasonable sleep time is
-        timer_sleep(1000);
+        // Sleep for 30 seconds
+        timer_msleep(30 * 1000);
         flush_cache();
     }
 }
