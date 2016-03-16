@@ -60,7 +60,9 @@ struct rwlock {
     struct lock mutex;
     struct condition can_read;
     struct condition can_write;
-}
+    int nreaders;
+    bool writing;
+};
 
 void rwlock_init(struct rwlock *);
 void rwlock_racquire(struct rwlock *);
