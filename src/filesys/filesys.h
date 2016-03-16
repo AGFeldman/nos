@@ -9,9 +9,17 @@
 #define ROOT_DIR_SECTOR 1       /*!< Root directory file inode sector. */
 /*! @} */
 
+// Buffer cache block
+struct bc_block {
+    bool used;
+    block_sector_t block_num;
+    uint32_t data[BLOCK_SECTOR_SIZE];
+};
+
 /*! Block device that contains the file system. */
 struct block *fs_device;
 
+struct bc_block * bc_init(void);
 void filesys_init(bool format);
 void filesys_done(void);
 bool filesys_create(const char *name, off_t initial_size);

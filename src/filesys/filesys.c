@@ -22,7 +22,7 @@ void filesys_init(bool format) {
     inode_init();
     free_map_init();
 
-    if (format) 
+    if (format)
         do_format();
 
     free_map_open();
@@ -43,7 +43,7 @@ bool filesys_create(const char *name, off_t initial_size) {
                     free_map_allocate(1, &inode_sector) &&
                     inode_create(inode_sector, initial_size) &&
                     dir_add(dir, name, inode_sector));
-    if (!success && inode_sector != 0) 
+    if (!success && inode_sector != 0)
         free_map_release(inode_sector, 1);
     dir_close(dir);
 
@@ -85,3 +85,6 @@ static void do_format(void) {
     printf("done.\n");
 }
 
+struct bc_block * bc_init(void) {
+
+}
