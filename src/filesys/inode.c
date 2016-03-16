@@ -5,6 +5,7 @@
 #include <string.h>
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
+#include "filesys/cache.h"
 #include "threads/malloc.h"
 
 /*! Identifies an inode. */
@@ -40,21 +41,24 @@ static inline size_t bytes_to_sectors(off_t size) {
 /*! In-memory inode. */
 struct inode {
     struct list_elem elem;              /*!< Element in inode list. */
+    // This is how we will access the inode's content
     block_sector_t sector;              /*!< Sector number of disk location. */
     int open_cnt;                       /*!< Number of openers. */
     bool removed;                       /*!< True if deleted, false otherwise. */
     int deny_write_cnt;                 /*!< 0: writes ok, >0: deny writes. */
-    struct inode_disk data;             /*!< Inode content. */
+    // TODO(agf): Synchronize access to this once we allow file length to change
+    off_t length;
 };
 
 /*! Returns the block device sector that contains byte offset POS
     within INODE.
     Returns -1 if INODE does not contain data for a byte at offset
     POS. */
-static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
-    ASSERT(inode != NULL);
-    if (pos < inode->data.length)
-        return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+static block_sector_t byte_to_sector(const struct inode_disk *data,
+                                     off_t pos) {
+    ASSERT(data != NULL);
+    if (pos < data->length)
+        return data->start + pos / BLOCK_SECTOR_SIZE;
     else
         return -1;
 }
@@ -97,6 +101,8 @@ void inode_init(void) {
     device.
     Returns true if successful.
     Returns false if memory or disk allocation fails. */
+// TODO(agf): Update this for new inode structure.
+// Length should always be 0.
 bool inode_create(block_sector_t sector, off_t length) {
     struct inode_disk *disk_inode = NULL;
     bool success = false;
@@ -150,13 +156,16 @@ struct inode * inode_open(block_sector_t sector) {
     if (inode == NULL)
         return NULL;
 
+    struct inode_disk data;
+    bc_read_block(sector, (void *) &data);
+
     /* Initialize. */
     list_push_front(&open_inodes, &inode->elem);
     inode->sector = sector;
     inode->open_cnt = 1;
     inode->deny_write_cnt = 0;
     inode->removed = false;
-    block_read(fs_device, inode->sector, &inode->data);
+    inode->length = data.length;
     return inode;
 }
 
@@ -187,9 +196,11 @@ void inode_close(struct inode *inode) {
 
         /* Deallocate blocks if removed. */
         if (inode->removed) {
+            // TODO(agf): Update this for new inode structure
             free_map_release(inode->sector, 1);
-            free_map_release(inode->data.start,
-                             bytes_to_sectors(inode->data.length));
+            // TODO(agf): Update
+            // free_map_release(inode->data.start,
+            //                  bytes_to_sectors(inode->data.length));
         }
 
         free(inode);
@@ -206,14 +217,18 @@ void inode_remove(struct inode *inode) {
 /*! Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
+// TODO(agf): Update this for the new inode structure
 off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset) {
     uint8_t *buffer = buffer_;
     off_t bytes_read = 0;
     uint8_t *bounce = NULL;
 
+    struct inode_disk data;
+    bc_read_block(inode->sector, (void *) &data);
+
     while (size > 0) {
         /* Disk sector to read, starting byte offset within sector. */
-        block_sector_t sector_idx = byte_to_sector (inode, offset);
+        block_sector_t sector_idx = byte_to_sector (&data, offset);
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
         /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -258,6 +273,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     less than SIZE if end of file is reached or an error occurs.
     (Normally a write at end of file would extend the inode, but
     growth is not yet implemented.) */
+// TODO(agf): Update this for the new inode structure
 off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t offset) {
     const uint8_t *buffer = buffer_;
     off_t bytes_written = 0;
@@ -266,9 +282,12 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
     if (inode->deny_write_cnt)
         return 0;
 
+    struct inode_disk data;
+    bc_read_block(inode->sector, (void *) &data);
+
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
-        block_sector_t sector_idx = byte_to_sector(inode, offset);
+        block_sector_t sector_idx = byte_to_sector(&data, offset);
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
         /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -333,7 +352,8 @@ void inode_allow_write (struct inode *inode) {
 }
 
 /*! Returns the length, in bytes, of INODE's data. */
+/*! Returns the length, in bytes, of INODE's data. */
 off_t inode_length(const struct inode *inode) {
-    return inode->data.length;
+    return inode->length;
 }
 
