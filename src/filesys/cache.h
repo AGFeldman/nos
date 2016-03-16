@@ -20,8 +20,8 @@ struct bc_block {
 
 void bc_init(void);
 
-void read_block(block_sector_t, void *);
-void write_block(block_sector_t, void *);
+void bc_read_block(block_sector_t, void *);
+void bc_write_block(block_sector_t, void *);
 
 struct bc_block * find_block(block_sector_t);
 struct bc_block * find_victim(void);
