@@ -1,3 +1,4 @@
+#include "filesys/filesys.h"
 #include "filesys/cache.h"
 #include "threads/thread.h"
 
@@ -7,8 +8,6 @@ struct bc_block * bc;
 
 // For clock eviction algorithm
 struct bc_block * hand;
-
-struct block * filesys_block;
 
 static void read_ahead(block_sector_t);
 static thread_func read_ahead_helper;
@@ -26,10 +25,6 @@ void bc_init(void) {
         block->data = (void *) ((char *) data_block + i * BLOCK_SECTOR_SIZE);
     }
     hand = bc;
-    filesys_block = block_get_role(BLOCK_FILESYS);
-    if (filesys_block == NULL) {
-        PANIC("bc_init: No file system device found, can't init file system.");
-    }
     write_behind();
 }
 
@@ -37,45 +32,34 @@ void bc_init(void) {
 // BLOCK_SECTOR_SIZE bytes. Uses filesystem cache; does not necessarily hit
 // disk.
 void bc_read_block(block_sector_t sought_block_num, void * buffer) {
-    ASSERT(filesys_block != NULL);
-    check_sector(filesys_block, sought_block_num);
-    filesys_block->ops->read(filesys_block->aux, sought_block_num, buffer);
-    filesys_block->read_cnt++;
-
-    // struct bc_block * found_block = find_block(sought_block_num);
-    // if (!found_block) {
-    //     found_block = load_block(sought_block_num);
-    // }
-    // found_block->accessed = true;
-    // memcpy(found_block->data, buffer, BLOCK_SECTOR_SIZE);
+    struct bc_block * found_block = find_block(sought_block_num);
+    if (!found_block) {
+        found_block = load_block(sought_block_num);
+    }
+    found_block->accessed = true;
+    memcpy(buffer, found_block->data, BLOCK_SECTOR_SIZE);
 }
 
 // Write sector SECTOR to BLOCK from BUFFER, which must contain
 // BLOCK_SECTOR_SIZE bytes. The write occurs in the filesystem cache; this does
 // not necessarily hit disk.
 void bc_write_block(block_sector_t sought_block_num, void * buffer) {
-    ASSERT(filesys_block != NULL);
-    check_sector(filesys_block, sought_block_num);
-    filesys_block->ops->write(filesys_block->aux, sought_block_num, buffer);
-    filesys_block->write_cnt++;
-
-    // struct bc_block * found_block = find_block(sought_block_num);
-    // if (!found_block) {
-    //     // TODO(agf): We should try to avoid reading from disk here
-    //     found_block = load_block(sought_block_num);
-    // }
-    // found_block->accessed = true;
-    // found_block->dirty = true;
-    // memcpy(buffer, found_block->data, BLOCK_SECTOR_SIZE);
+    struct bc_block * found_block = find_block(sought_block_num);
+    if (!found_block) {
+        found_block = load_block(sought_block_num);
+    }
+    found_block->accessed = true;
+    found_block->dirty = true;
+    memcpy(found_block->data, buffer, BLOCK_SECTOR_SIZE);
 }
 
 
 void write_back_block(struct bc_block * write_block) {
     // This code block is from devices/block.c : block_write()
-    check_sector(filesys_block, write_block->block_num);
-    filesys_block->ops->write(filesys_block->aux,
+    check_sector(fs_device, write_block->block_num);
+    fs_device->ops->write(fs_device->aux,
                               write_block->block_num, write_block->data);
-    filesys_block->write_cnt++;
+    fs_device->write_cnt++;
 
     write_block->dirty = false;
 }
@@ -85,7 +69,7 @@ struct bc_block * find_block(block_sector_t sought_block_num) {
     size_t i;
     for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
         struct bc_block * block = bc + i;
-        if (block->block_num == sought_block_num) {
+        if (block->occupied && block->block_num == sought_block_num) {
             return block;
         }
     }
@@ -104,9 +88,9 @@ struct bc_block * load_block(block_sector_t sought_block_num) {
     }
 
     // This code block is from devices/block.c : block_read()
-    check_sector(filesys_block, sought_block_num);
-    filesys_block->ops->read(filesys_block->aux, sought_block_num, dest->data);
-    filesys_block->read_cnt++;
+    check_sector(fs_device, sought_block_num);
+    fs_device->ops->read(fs_device->aux, sought_block_num, dest->data);
+    fs_device->read_cnt++;
 
     dest->occupied = true;
     dest->accessed = true;
