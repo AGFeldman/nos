@@ -104,13 +104,12 @@ void evict_block(struct bc_block *evictee) {
 }
 
 void flush_cache(void) {
-    size_t i;
-    for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
-        struct bc_block * block = bc + i;
-        write_back_block(block);
-        block->dirty = false;
-    }
-
+    // size_t i;
+    // for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
+    //     struct bc_block * block = bc + i;
+    //     write_back_block(block);
+    //     block->dirty = false;
+    // }
 }
 
 void advance_hand(void) {
