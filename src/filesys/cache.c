@@ -15,7 +15,6 @@ static thread_func read_ahead_helper;
 static void write_behind(void);
 static thread_func write_behind_helper;
 
-// TODO: call from thread
 void bc_init(void) {
     void * data_block = malloc(NUM_CACHE_BLOCKS * BLOCK_SECTOR_SIZE);
     bc = (struct bc_block *) malloc(NUM_CACHE_BLOCKS * sizeof(struct bc_block));
@@ -104,12 +103,13 @@ void evict_block(struct bc_block *evictee) {
 }
 
 void flush_cache(void) {
-    // size_t i;
-    // for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
-    //     struct bc_block * block = bc + i;
-    //     write_back_block(block);
-    //     block->dirty = false;
-    // }
+    size_t i;
+    for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
+        struct bc_block * block = bc + i;
+        if (block->occupied && block->dirty) {
+            write_back_block(block);
+        }
+    }
 }
 
 void advance_hand(void) {

@@ -43,6 +43,7 @@
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
+#include "filesys/cache.h"
 
 #endif
 
@@ -84,7 +85,7 @@ int main(void) NO_RETURN;
 int main(void) {
     char **argv;
 
-    /* Clear BSS. */  
+    /* Clear BSS. */
     bss_init();
 
     /* Break command line into arguments and parse options. */
@@ -94,7 +95,7 @@ int main(void) {
     /* Initialize ourselves as a thread so we can use locks,
        then enable console locking. */
     thread_init();
-    console_init();  
+    console_init();
 
     /* Greet user. */
     printf("Pintos booting with %'"PRIu32" kB RAM...\n",
@@ -131,6 +132,7 @@ int main(void) {
     ide_init();
     locate_block_devices();
     filesys_init(format_filesys);
+    bc_init();
 #endif
 
     printf("Boot complete.\n");
@@ -267,14 +269,14 @@ static char ** parse_options(char **argv) {
        for reproducibility.  To fix this, give the "-r" option to
        the pintos script to request real-time execution. */
     random_init(rtc_get_time());
-  
+
     return argv;
 }
 
 /*! Runs the task specified in ARGV[1]. */
 static void run_task(char **argv) {
     const char *task = argv[1];
-  
+
     printf("Executing '%s':\n", task);
 
 #ifdef USERPROG
