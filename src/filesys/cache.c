@@ -1,4 +1,5 @@
 #include "filesys/cache.h"
+#include "threads/thread.h"
 
 // Buffer cache, an array of 64 bc_blocks,
 // each of which holds one block (512 bytes) of memory
@@ -8,6 +9,11 @@ struct bc_block * bc;
 struct bc_block * hand;
 
 struct block * filesys_block;
+
+static void read_ahead(block_sector_t);
+static thread_func * read_ahead_helper(void *);
+static void write_behind(void);
+static thread_func * write_behind_helper(void);
 
 // TODO: call from thread
 void bc_init(void) {
@@ -21,6 +27,7 @@ void bc_init(void) {
     }
     hand = bc;
     filesys_block = block_get_role(BLOCK_FILESYS);
+    write_behind();
 }
 
 void read_block(block_sector_t sought_block_num, void * buffer) {
@@ -110,5 +117,32 @@ void advance_hand(void) {
     hand++;
     if (hand >= bc + NUM_CACHE_BLOCKS) {
         hand = bc;
+    }
+}
+
+// Creates a background thread to fetch the block indicated by |sector| into
+// the filesystem cache.
+static void read_ahead(block_sector_t sector) {
+    tid_t tid = thread_create("read_ahead", PRI_DEFAULT, read_ahead_helper,
+                              (void *) sector);
+    ASSERT(tid != TID_ERROR);
+}
+
+static thread_func * read_ahead_helper(void * aux) {
+    block_sector_t sector = (block_sector_t) aux;
+    // TODO(agf): Fetch into filesystem cache
+}
+
+static void write_behind(void) {
+    tid_t tid = thread_create("write_behind", PRI_DEFAULT, write_behind_helper,
+                              NULL);
+    ASSERT(tid != TID_ERROR);
+}
+
+static thread_func * write_behind_helper(void) {
+    while(true) {
+        // TODO: no idea what a reasonable sleep time is
+        timer_sleep(1000);
+        flush_cache();
     }
 }

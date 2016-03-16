@@ -2,6 +2,7 @@
 #define FILESYS_CACHE_H
 
 #include "devices/block.h"
+#include "devices/timer.h"
 #include <stdbool.h>
 #include <string.h>
 #include "threads/malloc.h"
