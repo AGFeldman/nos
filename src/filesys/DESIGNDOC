@@ -195,6 +195,23 @@ complexity.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+#define NUM_CACHE_BLOCKS 64
+
+// Buffer cache block
+struct bc_block {
+    // Whether we have filled the block yet
+    bool occupied;
+    // Whether the block has been accessed since being loaded
+    bool accessed;
+    // Whether the block has been written to since being loaded
+    bool dirty;
+    // The disk sector that the block came from
+    block_sector_t block_num;
+    // A pointer to the 512 in-memory bytes that mirror the bytes on disk
+    // (might be dirty)
+    char * data;
+};
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
@@ -212,6 +229,10 @@ because I got the impression that that is the default time for Linux, though
 I didn't look it up.
 
 >> C4: Describe your implementation of read-ahead.
+
+We have outline code that starts another thread in the background. This code
+would be called at the beginning of a block read. However, that is not 
+implemented.
 
 ---- SYNCHRONIZATION ----
 
