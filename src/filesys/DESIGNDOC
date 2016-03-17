@@ -240,7 +240,18 @@ struct bc_block {
     // A pointer to the 512 in-memory bytes that mirror the bytes on disk
     // (might be dirty)
     char * data;
+    // For protecting cache block entries
+    struct rwlock rwlock;
 };
+Stores information about each block in the cache. 
+
+// Buffer cache, an array of 64 bc_blocks,
+// each of which holds one block (512 bytes) of memory
+struct bc_block * bc;
+
+// For clock eviction algorithm
+struct bc_block * hand;
+Iterates through the array bc, clearing accessed bits, until it finds an unaccessed block.
 
 ---- ALGORITHMS ----
 
