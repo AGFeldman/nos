@@ -34,6 +34,10 @@ bool free_map_allocate(size_t cnt, block_sector_t *sectorp) {
     return sector != BITMAP_ERROR;
 }
 
+void free_map_persist(void) {
+    bitmap_write(free_map, free_map_file);
+}
+
 /*! Makes CNT sectors starting at SECTOR available for use. */
 void free_map_release(block_sector_t sector, size_t cnt) {
     ASSERT(bitmap_all(free_map, sector, cnt));

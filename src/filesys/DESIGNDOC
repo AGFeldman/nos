@@ -37,13 +37,76 @@ Aaron Feldman <feldmando@gmail.com>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+// Number of blocks directly accessible from an on-disk inode
+#define NUM_DIRECT 123
+// Number of blocks indirectly accessible from an on-disk inode
+#define NUM_INDIRECT 1
+// Number of blocks doubly-indirectly accessible from an on-disk inode
+#define NUM_DINDIRECT 1
+
+/*! On-disk inode.
+    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+struct inode_disk {
+    block_sector_t start;               /*!< First data sector. */
+    off_t length;                       /*!< File size in bytes. */
+    unsigned magic;                     /*!< Magic number. */
+    // Array of sectors.
+    // For simplicity, we should have blocks[0] == start.
+    block_sector_t blocks[NUM_DIRECT + NUM_INDIRECT + NUM_DINDIRECT];
+};
+
+/*! In-memory inode. */
+struct inode {
+    struct list_elem elem;              /*!< Element in inode list. */
+    // This is how we will access the inode's content
+    block_sector_t sector;              /*!< Sector number of disk location. */
+    int open_cnt;                       /*!< Number of openers. */
+    bool removed;                       /*!< True if deleted, false otherwise. */
+    int deny_write_cnt;                 /*!< 0: writes ok, >0: deny writes. */
+    // Length of the inode's data, in bytes
+    off_t length;
+    // Used to enforce the restriction that at most one process may extend
+    // a file at one time.
+    struct lock extend_lock;
+};
+
+
+// A structure for iterating through the blocks indexed by an inode.
+struct inode_iter {
+    struct inode_disk * idisk;
+    struct inode * inode;
+    block_sector_t * bottom;
+    int bottom_offset;
+    block_sector_t * first_level;
+    int first_level_offset;
+    block_sector_t * second_level;
+    int second_level_offset;
+    block_sector_t sector_num;
+    block_sector_t value;
+    block_sector_t num_allocated_sectors;
+    block_sector_t max_num_allocated_sectors;
+};
+
+
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
+
+Let's count the sectors.
+We have 123 direct blocks, so that's 123 sectors.
+We have 1 indirect block, and each one can address 128 sectors. So that's
+another 1 * 128 sectors.
+We have 1 doubly-indirect block, so that's another 1 * 128 * 128 sectors.
+For a grand total of 123 + 1 * 128 + 1 * 128^2 = 16635 sectors.
+Each sector is 512 bytes, so this a max file size of 8388859 bytes,
+or about 8.00024 MiB.
 
 ---- SYNCHRONIZATION ----
 
 >> A3: Explain how your code avoids a race if two processes attempt to
 >> extend a file at the same time.
+
+Each `struct inode` has a mutex lock called `extend_lock` that must be held
+while extending a file.
 
 >> A4: Suppose processes A and B both have file F open, both
 >> positioned at end-of-file.  If A reads and B writes F at the same
@@ -52,12 +115,28 @@ Aaron Feldman <feldmando@gmail.com>
 >> nonzero data, A is not allowed to see all zeros.  Explain how your
 >> code avoids this race.
 
+Our code does have an intermediate step where B extends the file with all 
+zeros, even though B is not writing zeros. However, the length of the file
+is not marked as extended until B is finished with it, so A won't be able to
+read past the end of the original file until B has finished writing its data.
+
 >> A5: Explain how your synchronization design provides "fairness".
 >> File access is "fair" if readers cannot indefinitely block writers
 >> or vice versa.  That is, many processes reading from a file cannot
 >> prevent forever another process from writing the file, and many
 >> processes writing to a file cannot prevent another process forever
 >> from reading the file.
+
+There are very few restrictions on what may happen simultaneously. Only one
+process may extend a file at one time, but that is the only file-level 
+restriction. There are block-level restrictions enforced that can be enforced
+by a read-write lock in the buffer cache. (TODO(agf): At time of writing, not
+sure how completely these are enforced.) In this case, fairness depends on the
+fairness of the read-write lock. Our RW lock tries to be fair: If the number
+of readers hits zero, it signals to waiting writers before giving up the mutex
+lock, and when it releases the write lock, it broadcasts to waiting readers
+before signaling to other writers. However, it is still possible that a steady
+stream of readers could prevent a write from ever occurring.
 
 ---- RATIONALE ----
 
@@ -111,8 +190,17 @@ Aaron Feldman <feldmando@gmail.com>
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
 >> block to evict.
+We use a simple clock algorithm. If the entry under the hand is marked as
+"accessed", then we clear the "accessed" attribute and move on to the next
+entry. We evict the first entry we find with a clear "accessed" attribute.
 
 >> C3: Describe your implementation of write-behind.
+
+At the end of initializing the buffer cache, we start a background 
+"write_behind" thread. This thread repeatedly sleeps for 30 seconds (using
+timer_msleep()), then flushes the buffer cache to disk. We chose 30 seconds
+because I got the impression that that is the default time for Linux, though
+I didn't look it up.
 
 >> C4: Describe your implementation of read-ahead.
 
@@ -141,6 +229,8 @@ website.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
+
+It is very hard to test this assignment in small chunks.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?

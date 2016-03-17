@@ -7,16 +7,17 @@
 #include "filesys/free-map.h"
 #include "filesys/cache.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
 // Number of blocks directly accessible from an on-disk inode
-#define NUM_DIRECT 75
+#define NUM_DIRECT 123
 // Number of blocks indirectly accessible from an on-disk inode
-#define NUM_INDIRECT 40
+#define NUM_INDIRECT 1
 // Number of blocks doubly-indirectly accessible from an on-disk inode
-#define NUM_DINDIRECT 10
+#define NUM_DINDIRECT 1
 
 /*! On-disk inode.
     Must be exactly BLOCK_SECTOR_SIZE bytes long. */
@@ -24,11 +25,9 @@ struct inode_disk {
     block_sector_t start;               /*!< First data sector. */
     off_t length;                       /*!< File size in bytes. */
     unsigned magic;                     /*!< Magic number. */
-    // For simplicity, we should have blocks[0] == start
+    // Array of sectors.
+    // For simplicity, we should have blocks[0] == start.
     block_sector_t blocks[NUM_DIRECT + NUM_INDIRECT + NUM_DINDIRECT];
-    // TODO(agf): For now, let's use "start" and the first 75 entries in
-    // "unused" to index blocks directly. The next 40 entries should be for
-    // indirect blocks, and the next 10 are for doubly-indirect blocks.
 };
 
 /*! Returns the number of sectors to allocate for an inode SIZE
@@ -47,6 +46,9 @@ struct inode {
     int deny_write_cnt;                 /*!< 0: writes ok, >0: deny writes. */
     // TODO(agf): Synchronize access to this once we allow file length to change
     off_t length;
+    // Used to enforce the restriction that at most one process may extend
+    // a file at one time.
+    struct lock extend_lock;
 };
 
 // A structure for iterating through the blocks indexed by an inode.
@@ -277,6 +279,7 @@ struct inode * inode_open(block_sector_t sector) {
     inode->deny_write_cnt = 0;
     inode->removed = false;
     inode->length = data.length;
+    lock_init(&inode->extend_lock);
     return inode;
 }
 
@@ -408,6 +411,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
     off_t length = inode_length(inode);
     if (size + offset > length) {
         length = size + offset;
+        lock_acquire(&inode->extend_lock);
     }
 
     while (size > 0) {
@@ -445,6 +449,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, off_t
         data->length = orig_offset + bytes_written;
         bc_write_block(inode->sector, (void *) data);
         ASSERT(orig_offset + bytes_written == inode_length(inode));
+        lock_release(&inode->extend_lock);
     }
     free(data);
 

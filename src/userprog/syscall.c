@@ -42,7 +42,7 @@ void syscall_init(void) {
 }
 
 void filesys_lock_acquire(void) {
-    lock_acquire(&filesys_lock);
+    // lock_acquire(&filesys_lock);
 }
 
 bool filesys_lock_held(void) {
@@ -50,7 +50,7 @@ bool filesys_lock_held(void) {
 }
 
 void filesys_lock_release(void) {
-    lock_release(&filesys_lock);
+    // lock_release(&filesys_lock);
 }
 
 /* Exit with status -1 if |p| is an invalid user pointer. */
