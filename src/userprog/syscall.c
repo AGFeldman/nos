@@ -35,6 +35,11 @@ void sys_create(struct intr_frame *f);
 void sys_remove(struct intr_frame *f);
 void sys_close(struct intr_frame *f);
 void sys_tell(struct intr_frame *f);
+void sys_chdir(struct intr_frame *f);
+void sys_mkdir(struct intr_frame *f);
+void sys_readdir(struct intr_frame *f);
+void sys_isdir(struct intr_frame *f);
+void sys_inumber(struct intr_frame *f);
 
 void syscall_init(void) {
     lock_init(&filesys_lock);
@@ -100,6 +105,16 @@ static void syscall_handler(struct intr_frame *f) {
         sys_tell(f);
     } else if (syscall_num == SYS_CLOSE) {
         sys_close(f);
+    } else if (syscall_num == SYS_CHDIR) {
+        sys_chdir(f);
+    } else if (syscall_num == SYS_MKDIR) {
+        sys_mkdir(f);
+    } else if (syscall_num == SYS_READDIR) {
+        sys_readdir(f);
+    } else if (syscall_num == SYS_ISDIR) {
+        sys_isdir(f);
+    } else if (syscall_num == SYS_INUMBER) {
+        sys_inumber(f);
     } else {
         // TODO(agf)
         printf("system call: not handled!\n");
@@ -150,9 +165,10 @@ void sys_open(struct intr_frame *f) {
     int i;
     for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
         if (intr_trd->open_files[i] == NULL) {
-            // char ** file_name_p = (char
             char * file_name = (char *) *((int *) f->esp + 1);
             check_pointer_validity(file_name);
+            if (file_name[0] == '/') {
+            }
             filesys_lock_acquire();
             struct file * afile = filesys_open(file_name);
             filesys_lock_release();
@@ -311,4 +327,35 @@ void sys_seek(struct intr_frame *f) {
     filesys_lock_acquire();
     file_seek(afile, position);
     filesys_lock_release();
+}
+
+// bool chdir (const char *dir)
+void sys_chdir(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    char * dir = *((char **) ((int *) f->esp + 1));
+
+    chdir(dir);
+}
+
+void sys_mkdir(struct intr_frame *f) {
+
+}
+
+// bool readdir (int fd, char *name)
+void sys_readdir(struct intr_frame *f) {
+
+}
+
+// bool isdir (int fd)
+void sys_isdir(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    int fd = *((int *) f->esp + 1);
+    f->eax =  thread_current()->open_files[fd - 2]->isdir;
+}
+
+// int inumber (int fd)
+void sys_inumber(struct intr_frame *f) {
+    check_pointer_validity((int *) f->esp + 1);
+    int fd = *((int *) f->esp + 1);
+    f->eax = thread_current()->open_files[fd - 2]->inode->sector;
 }

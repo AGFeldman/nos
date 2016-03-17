@@ -110,6 +110,7 @@ void thread_init(void) {
     init_thread(initial_thread, "main", PRI_DEFAULT, 0, 0);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
+    initial_thread->working_dir = dir_open_root();
 }
 
 /*! Starts preemptive thread scheduling by enabling interrupts.
@@ -616,6 +617,8 @@ static void init_thread(struct thread *t, const char *name, int priority,
     t->priority = priority;
     t->nice = nice;
     t->recent_cpu = recent_cpu;
+    // TODO: unnecessary to call thread_current() multiple times
+    t->working_dir = thread_current()->working_dir;
     t->magic = THREAD_MAGIC;
 
     int i;

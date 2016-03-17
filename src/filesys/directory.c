@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /*! A directory. */
 struct dir {
@@ -15,6 +16,7 @@ struct dir {
 /*! A single directory entry. */
 struct dir_entry {
     block_sector_t inode_sector;        /*!< Sector number of header. */
+    block_sector_t parent_sector;
     char name[NAME_MAX + 1];            /*!< Null terminated file name. */
     bool in_use;                        /*!< In use or free? */
 };
@@ -23,6 +25,13 @@ struct dir_entry {
     given SECTOR.  Returns true if successful, false on failure. */
 bool dir_create(block_sector_t sector, size_t entry_cnt) {
     return inode_create(sector, entry_cnt * sizeof(struct dir_entry));
+}
+
+bool subdir_create(const char *name) {
+    struct dir * wd = thread_current()->working_dir;
+    block_sector_t sector =
+    dir_create(sector, 0);
+    dir_add(wd, name, sector);
 }
 
 /*! Opens and returns the directory for the given INODE, of which
@@ -37,7 +46,7 @@ struct dir * dir_open(struct inode *inode) {
     else {
         inode_close(inode);
         free(dir);
-        return NULL; 
+        return NULL;
     }
 }
 
@@ -133,7 +142,7 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     /* Set OFS to offset of free slot.
        If there are no free slots, then it will be set to the
        current end-of-file.
-     
+
        inode_read_at() will only return a short read at end of file.
        Otherwise, we'd need to verify that we didn't get a short
        read due to something intermittent such as low memory. */
@@ -197,7 +206,7 @@ bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
         if (e.in_use) {
             strlcpy(name, e.name, NAME_MAX + 1);
             return true;
-        } 
+        }
     }
     return false;
 }

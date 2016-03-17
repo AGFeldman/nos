@@ -10,6 +10,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -135,6 +137,9 @@ struct thread {
     uint32_t *pagedir;                  /*!< Page directory. */
     /**@{*/
 #endif
+
+    /* Current directory */
+    struct dir *working_dir;
 
     /*! Owned by thread.c. */
     /**@{*/
