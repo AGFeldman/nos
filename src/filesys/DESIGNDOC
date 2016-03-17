@@ -218,6 +218,26 @@ is often being searched or written to.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+#define NUM_CACHE_BLOCKS 64
+
+// Buffer cache block
+struct bc_block {
+    bool occupied;
+    bool accessed;
+    bool dirty;
+    block_sector_t block_num;
+    char * data;
+};
+Stores information about each block in the cache. 
+
+// Buffer cache, an array of 64 bc_blocks,
+// each of which holds one block (512 bytes) of memory
+struct bc_block * bc;
+
+// For clock eviction algorithm
+struct bc_block * hand;
+Iterates through the array bc, clearing accessed bits, until it finds an unaccessed block.
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
