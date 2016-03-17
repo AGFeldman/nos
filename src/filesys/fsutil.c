@@ -15,7 +15,7 @@
 void fsutil_ls(char **argv UNUSED) {
     struct dir *dir;
     char name[NAME_MAX + 1];
-  
+
     printf("Files in the root directory:\n");
     dir = dir_open_root();
     if (dir == NULL)
@@ -29,7 +29,7 @@ void fsutil_ls(char **argv UNUSED) {
     hex and ASCII. */
 void fsutil_cat(char **argv) {
     const char *file_name = argv[1];
-  
+
     struct file *file;
     char *buffer;
 
@@ -44,7 +44,7 @@ void fsutil_cat(char **argv) {
         if (n == 0)
             break;
 
-        hex_dump(pos, buffer, n, true); 
+        hex_dump(pos, buffer, n, true);
     }
     palloc_free_page(buffer);
     file_close(file);
@@ -177,7 +177,7 @@ void fsutil_append(char **argv) {
     dst = block_get_role(BLOCK_SCRATCH);
     if (dst == NULL)
         PANIC("couldn't open scratch device");
-  
+
     /* Write ustar header to first sector. */
     if (!ustar_make_header(file_name, USTAR_REGULAR, size, buffer))
         PANIC("%s: name too long for ustar format", file_name);

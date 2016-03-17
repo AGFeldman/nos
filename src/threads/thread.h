@@ -141,13 +141,13 @@ struct thread {
     /* Current directory */
     struct dir *working_dir;
 
+    /* Fixed-size array of pointers to open file structs */
+    struct file *open_files[16];
+
     /*! Owned by thread.c. */
     /**@{*/
     unsigned magic;                     /* Detects stack overflow. */
     /**@}*/
-
-    /* Fixed-size array of pointers to open file structs */
-    struct file *open_files[16];
 };
 
 /*! If false (default), use round-robin scheduler.

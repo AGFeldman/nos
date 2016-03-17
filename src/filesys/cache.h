@@ -15,12 +15,15 @@ struct bc_block {
     bool accessed;
     bool dirty;
     block_sector_t block_num;
-    void * data;
+    char * data;
 };
 
 void bc_init(void);
 
+void bc_read_block_bytes(block_sector_t, void *, int, size_t);
 void bc_read_block(block_sector_t, void *);
+void bc_write_block_bytes(block_sector_t, void *, int, size_t, bool);
+void bc_zero(block_sector_t);
 void bc_write_block(block_sector_t, void *);
 
 struct bc_block * find_block(block_sector_t);
