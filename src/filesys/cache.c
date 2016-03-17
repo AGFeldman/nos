@@ -120,6 +120,7 @@ struct bc_block * load_block(block_sector_t sought_block_num) {
     dest->accessed = true;
     dest->dirty = false;
     dest->block_num = sought_block_num;
+    rwlock_init(&dest->rwlock);
     return dest;
 }
 

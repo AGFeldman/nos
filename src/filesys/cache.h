@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 #define NUM_CACHE_BLOCKS 64
 
@@ -16,6 +17,7 @@ struct bc_block {
     bool dirty;
     block_sector_t block_num;
     char * data;
+    struct rwlock rwlock;
 };
 
 void bc_init(void);

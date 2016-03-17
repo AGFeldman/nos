@@ -24,6 +24,9 @@ Aaron Feldman <feldmando@gmail.com>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Incomplete subdirectories work is on a "subdirectories" branch:
+https://github.com/AGFeldman/nos/tree/subdirectories/src/filesys
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
@@ -195,10 +198,14 @@ file_from_path() is given a different argument).
 >> should succeed, as should only one of two simultaneous attempts to
 >> create a file with the same name, and so on.
 
+Implementation is incomplete
+
 >> B5: Does your implementation allow a directory to be removed if it
 >> is open by a process or if it is in use as a process's current
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
+
+Implementation is incomplete
 
 ---- RATIONALE ----
 
@@ -263,8 +270,16 @@ implemented.
 >> buffer cache block, how are other processes prevented from evicting
 >> that block?
 
+We can have a read-write lock for each buffer cache entry. Read-acquire
+or write-acquire is performed when reading from or writing to a cache entry.
+Write-acquire is required before evicting the block.
+TODO(agf): Implementation may be incomplete
+
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
+
+The write lock is held on the block in question. 
+TODO(agf): Implementation may be incomplete.
 
 ---- RATIONALE ----
 
