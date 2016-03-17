@@ -100,9 +100,6 @@ static void syscall_handler(struct intr_frame *f) {
         sys_tell(f);
     } else if (syscall_num == SYS_CLOSE) {
         sys_close(f);
-    } else {
-        // TODO(agf)
-        printf("system call: not handled!\n");
     }
 }
 

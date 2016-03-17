@@ -146,6 +146,15 @@ stream of readers could prevent a write from ever occurring.
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
 
+Yes, we use a multi-level index structure. There are 123 direct blocks.
+There is one indirect block, which links to 128 blocks. And, there is one
+doubly indirect block, which links to 128 blocks, each of which links to 
+another 128 blocks. This seemed like the simplest structure that could allow
+us to index 8MiB files. One could imagine a structure where not all children
+of the doubly indirect block go equally deep. This might be slightly more
+space efficient, but did not seem close to being worth the added implementation
+complexity.
+
                 SUBDIRECTORIES
                 ==============
 
