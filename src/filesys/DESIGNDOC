@@ -227,6 +227,19 @@ I didn't look it up.
 >> C7: Describe a file workload likely to benefit from buffer caching,
 >> and workloads likely to benefit from read-ahead and write-behind.
 
+A workload that accesses some blocks repeatedly and frequently would benefit
+from buffer caching. For example, a process might use part of a file to store
+a counter, which it updates frequently. Since this would hit the same block
+frequently, it would benefit from buffer caching.
+
+A workload that performs a lot of sequential access would benefit from 
+read-ahead. One example is playing video or audio.
+
+Write-behind mostly protects against crashes being *too* bad -- you won't lose
+*too* much data. But you could lose some data. For this reason, workloads that
+depend on write-behind should be tolerant if some small amount of data is
+lost. One such workload would be gathering weather data.
+
                SURVEY QUESTIONS
                ================
 
