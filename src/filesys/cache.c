@@ -1,6 +1,7 @@
 #include "filesys/filesys.h"
 #include "filesys/cache.h"
 #include "threads/thread.h"
+#include "userprog/syscall.h"
 
 // Buffer cache, an array of 64 bc_blocks,
 // each of which holds one block (512 bytes) of memory
@@ -15,42 +16,65 @@ static void write_behind(void);
 static thread_func write_behind_helper;
 
 void bc_init(void) {
-    void * data_block = malloc(NUM_CACHE_BLOCKS * BLOCK_SECTOR_SIZE);
+    char * data_block = (char *) malloc(NUM_CACHE_BLOCKS * BLOCK_SECTOR_SIZE);
     bc = (struct bc_block *) malloc(NUM_CACHE_BLOCKS *
                                     sizeof(struct bc_block));
     size_t i;
     for (i = 0; i < NUM_CACHE_BLOCKS; i++) {
         struct bc_block * block = bc + i;
         block->occupied = false;
-        block->data = (void *) ((char *) data_block + i * BLOCK_SECTOR_SIZE);
+        block->data = data_block + i * BLOCK_SECTOR_SIZE;
     }
     hand = bc;
     write_behind();
+}
+
+void bc_read_block_bytes(block_sector_t sought_block_num, void * buffer,
+                         int offset, size_t bytes) {
+    ASSERT(offset + bytes <= BLOCK_SECTOR_SIZE);
+    struct bc_block * found_block = find_block(sought_block_num);
+    if (!found_block) {
+        found_block = load_block(sought_block_num);
+    }
+    found_block->accessed = true;
+    memcpy(buffer, found_block->data + offset, bytes);
 }
 
 // Reads sector SECTOR from BLOCK into BUFFER, which must have room for
 // BLOCK_SECTOR_SIZE bytes. Uses filesystem cache; does not necessarily hit
 // disk.
 void bc_read_block(block_sector_t sought_block_num, void * buffer) {
-    struct bc_block * found_block = find_block(sought_block_num);
-    if (!found_block) {
-        found_block = load_block(sought_block_num);
-    }
-    found_block->accessed = true;
-    memcpy(buffer, found_block->data, BLOCK_SECTOR_SIZE);
+    bc_read_block_bytes(sought_block_num, buffer, 0, BLOCK_SECTOR_SIZE);
 }
 
-// Write sector SECTOR to BLOCK from BUFFER, which must contain
-// BLOCK_SECTOR_SIZE bytes. The write occurs in the filesystem cache; this does
-// not necessarily hit disk.
-void bc_write_block(block_sector_t sought_block_num, void * buffer) {
+void bc_write_block_bytes(block_sector_t sought_block_num, void * buffer,
+                          int offset, size_t bytes, bool zero) {
     struct bc_block * found_block = find_block(sought_block_num);
     if (!found_block) {
         found_block = load_block(sought_block_num);
     }
     found_block->accessed = true;
     found_block->dirty = true;
-    memcpy(found_block->data, buffer, BLOCK_SECTOR_SIZE);
+    if (zero) {
+        memset(found_block->data, 0, BLOCK_SECTOR_SIZE);
+    }
+    if (buffer == NULL) {
+        ASSERT(zero && bytes == BLOCK_SECTOR_SIZE && offset == 0);
+        return;
+    }
+    memcpy(found_block->data + offset, buffer, bytes);
+}
+
+void bc_zero(block_sector_t block_num) {
+    bc_write_block_bytes(block_num, NULL, 0, BLOCK_SECTOR_SIZE, true);
+}
+
+// Write sector SECTOR to BLOCK from BUFFER, which must contain
+// BLOCK_SECTOR_SIZE bytes. The write occurs in the filesystem cache; this does
+// not necessarily hit disk.
+void bc_write_block(block_sector_t sought_block_num, void * buffer) {
+    bc_write_block_bytes(sought_block_num, buffer, 0, BLOCK_SECTOR_SIZE,
+                         false);
 }
 
 
@@ -58,7 +82,7 @@ void write_back_block(struct bc_block * write_block) {
     // This code block is from devices/block.c : block_write()
     check_sector(fs_device, write_block->block_num);
     fs_device->ops->write(fs_device->aux,
-                              write_block->block_num, write_block->data);
+                          write_block->block_num, write_block->data);
     fs_device->write_cnt++;
 
     write_block->dirty = false;
