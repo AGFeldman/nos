@@ -19,6 +19,7 @@ struct dir_entry {
     block_sector_t parent_sector;
     char name[NAME_MAX + 1];            /*!< Null terminated file name. */
     bool in_use;                        /*!< In use or free? */
+    bool is_dir;
 };
 
 /*! Creates a directory with space for ENTRY_CNT entries in the
@@ -110,12 +111,15 @@ bool dir_lookup(const struct dir *dir, const char *name, struct inode **inode) {
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    if (lookup(dir, name, &e, NULL))
+    bool isdir = false;
+
+    if (lookup(dir, name, &e, NULL)) {
         *inode = inode_open(e.inode_sector);
+        isdir = e.isdir;
     else
         *inode = NULL;
 
-    return *inode != NULL;
+    return isdir;
 }
 
 /*! Adds a file named NAME to DIR, which must not already contain a file by

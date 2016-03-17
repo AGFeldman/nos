@@ -160,6 +160,37 @@ void sys_exec(struct intr_frame *f) {
     }
 }
 
+/* Given a directory and a string representing a filepath,
+ * return a struct file * to the ultimate file or directory,
+ * leaving no other directories open.
+ * If the file/directory does not exist, return NULL. */
+struct file * file_from_path(struct dir * start_dir, char * filepath) {
+    if (filepath[strlen(filepath)] == '/') {
+        dir_close(start_dir);
+        return NULL;
+    }
+    char * save_ptr_page = palloc_get_page(0);
+    char ** save_ptr = &save_ptr_page;
+    struct inode * inode = NULL;
+    char * next = strtok_r(filepath, "/", save_ptr);
+    bool isdir = true;
+    while (next != NULL) {
+        isdir = dir_lookup(start_dir, next, &inode);
+        if (inode == NULL) {
+            dir_close(start_dir);
+            palloc_free_page(save_ptr_page);
+            return NULL;
+        }
+        // found the file/directory
+        dir_close(start_dir);
+        start_dir = dir_open(inode);
+        // TODO: free string next?
+        // TODO: free struct inode
+        next = strtok_r(filepath, "/", save_ptr);
+    }
+    // Last directory was actually a file
+}
+
 void sys_open(struct intr_frame *f) {
     struct thread *intr_trd = thread_current();
     int i;
